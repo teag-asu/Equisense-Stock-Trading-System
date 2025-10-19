@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EquiSense - Login</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+  <header>
+    <h1>EquiSense</h1>
+    <nav>
+      <ul>
+        <li><a href="{{ url_for('login') }}">Login</a></li>
+        <li><a href="{{ url_for('dashboard', user_id=1) }}">Trading Dashboard</a></li>
+        <li><a href="{{ url_for('login') }}">Admin Panel</a></li>
+      </ul>
+    </nav>
+  </header>
+
+  <main>
+    <section class="panel">
+      <h2>Login</h2>
+      <form action="{{ url_for('login') }}" method="POST">
+        <label for="username">Username</label>
+        <input type="text" id="username" name="username" placeholder="Enter username" required>
+
+        <label for="email">Email</label>
+        <input type="email" id="email" name="email" placeholder="Enter email" required>
+
+        <div class="buttons">
+          <button type="submit">Login</button>
+        </div>
+      </form>
+    </section>
+
+    <section class="panel">
+      <h2>Register</h2>
+      <form action="{{ url_for('register') }}" method="POST">
+        <label for="reg_username">Username</label>
+        <input type="text" id="reg_username" name="username" placeholder="Choose a username" required>
+
+        <label for="reg_email">Email</label>
+        <input type="email" id="reg_email" name="email" placeholder="Enter your email" required>
+
+        <div class="buttons">
+          <button type="submit">Register</button>
+        </div>
+      </form>
+    </section>
+  </main>
+
+  <footer>
+    <p>&copy; 2025 EquiSense</p>
+  </footer>
+</body>
+</html>
