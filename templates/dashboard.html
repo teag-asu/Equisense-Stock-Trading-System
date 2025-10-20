@@ -11,20 +11,45 @@
     <h1>EquiSense</h1>
     <nav>
       <ul>
-		<li><a href="login.html">Login</a></li>
-		<li><a href="dashboard.html">Trading Dashboard</a></li>
-		<li><a href="admin.html">Admin Panel</a></li>
+        <li><a href="{{ url_for('login') }}">Login</a></li>
+        <li><a href="{{ url_for('dashboard', user_id=user_id) }}">Trading Dashboard</a></li>
+        <li><a href="{{ url_for('admin') }}">Admin Panel</a></li>
       </ul>
     </nav>
   </header>
 
   <main>
+	{% with messages = get_flashed_messages(with_categories=true) %}
+		{% if messages %}
+			<div class="flash-messages">
+				{% for category, message in messages %}
+			<div class="flash {{ category }}">{{ message }}</div>
+			{% endfor %}
+			</div>
+		{% endif %}
+	{% endwith %}
+
     <section class="panel">
       <h2>Trading Dashboard</h2>
 
       <div class="portfolio">
         <h3>Portfolio Balance</h3>
-        <p>$0.00</p>
+        <p>${{ "%.2f"|format(balance) }}</p>
+      </div>
+
+      <div class="account-actions">
+        <h3>Account Actions</h3>
+        <form action="{{ url_for('deposit', user_id=user_id) }}" method="post">
+          <label for="deposit-amount">Deposit Amount</label>
+          <input type="number" id="deposit-amount" name="amount" step="0.01" required>
+          <button type="submit">Deposit</button>
+        </form>
+
+        <form action="{{ url_for('withdraw', user_id=user_id) }}" method="post">
+          <label for="withdraw-amount">Withdraw Amount</label>
+          <input type="number" id="withdraw-amount" name="amount" step="0.01" required>
+          <button type="submit">Withdraw</button>
+        </form>
       </div>
 
       <div class="holdings">
