@@ -11,9 +11,9 @@
     <h1>EquiSense</h1>
     <nav>
       <ul>
-		<li><a href="login.html">Login</a></li>
-		<li><a href="dashboard.html">Trading Dashboard</a></li>
-		<li><a href="admin.html">Admin Panel</a></li>
+        <li><a href="{{ url_for('login') }}">Login</a></li>
+        <li><a href="{{ url_for('dashboard', user_id=1) }}">Trading Dashboard</a></li>
+        <li><a href="{{ url_for('login') }}">Admin Panel</a></li>
       </ul>
     </nav>
   </header>
