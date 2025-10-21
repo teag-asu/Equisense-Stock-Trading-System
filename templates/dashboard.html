@@ -7,78 +7,147 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
 </head>
 <body>
-  <header>
-    <h1>EquiSense</h1>
-    <nav>
-      <ul>
-        <li><a href="{{ url_for('login') }}">Login</a></li>
-        <li><a href="{{ url_for('dashboard', user_id=user_id) }}">Trading Dashboard</a></li>
-        <li><a href="{{ url_for('admin') }}">Admin Panel</a></li>
-      </ul>
-    </nav>
-  </header>
+<header>
+  <h1>EquiSense</h1>
+  <nav>
+    <ul>
+      <li><a href="{{ url_for('dashboard', user_id=user_id) }}">Trading Dashboard</a></li>
+      <li><a href="{{ url_for('admin') }}">Admin Panel</a></li>
+    </ul>
+  </nav>
 
-  <main>
-	{% with messages = get_flashed_messages(with_categories=true) %}
-		{% if messages %}
-			<div class="flash-messages">
-				{% for category, message in messages %}
-			<div class="flash {{ category }}">{{ message }}</div>
-			{% endfor %}
-			</div>
-		{% endif %}
-	{% endwith %}
+  <div class="user-info">
+    <p>Logged in as: <strong>{{ user['username'] }}</strong></p>
+    <form action="{{ url_for('logout') }}" method="post">
+      <button type="submit">Log Out</button>
+    </form>
+  </div>
+</header>
 
-    <section class="panel">
-      <h2>Trading Dashboard</h2>
 
-      <div class="portfolio">
-        <h3>Portfolio Balance</h3>
-        <p>${{ "%.2f"|format(balance) }}</p>
+<main>
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      <div class="flash-messages">
+        {% for category, message in messages %}
+          <div class="flash {{ category }}">{{ message }}</div>
+        {% endfor %}
       </div>
+    {% endif %}
+  {% endwith %}
 
-      <div class="account-actions">
-        <h3>Account Actions</h3>
-        <form action="{{ url_for('deposit', user_id=user_id) }}" method="post">
-          <label for="deposit-amount">Deposit Amount</label>
-          <input type="number" id="deposit-amount" name="amount" step="0.01" required>
-          <button type="submit">Deposit</button>
+  <section class="panel">
+    <h2>Trading Dashboard</h2>
+
+    <div class="portfolio">
+      <h3>Portfolio Balance</h3>
+      <p>${{ "%.2f"|format(balance) }}</p>
+    </div>
+
+    <div class="form-section">
+      <div class="depositwithdraw">
+        <h3>Deposit / Withdraw</h3>
+        <form action="{{ url_for('depositwithdraw', user_id=user_id) }}" method="post">
+          <label for="account-amount">Amount</label>
+          <input type="number" id="account-amount" name="amount" step="0.01" required>
+          <div class="button-row">
+            <button type="submit" name="action" value="deposit">Deposit</button>
+            <button type="submit" name="action" value="withdraw">Withdraw</button>
+          </div>
         </form>
-
-        <form action="{{ url_for('withdraw', user_id=user_id) }}" method="post">
-          <label for="withdraw-amount">Withdraw Amount</label>
-          <input type="number" id="withdraw-amount" name="amount" step="0.01" required>
-          <button type="submit">Withdraw</button>
-        </form>
-      </div>
-
-      <div class="holdings">
-        <h3>List of Holdings</h3>
-        <table>
-          <tr>
-            <th>Symbol</th>
-            <th># of Shares</th>
-            <th>Value</th>
-          </tr>
-          <tr>
-            <td>---</td>
-            <td>0</td>
-            <td>$0.00</td>
-          </tr>
-        </table>
       </div>
 
       <div class="trade-actions">
-        <button>Buy</button>
-        <button>Sell</button>
-      </div>
+        <h3>Trade Stocks</h3>
+        <form action="{{ url_for('trade', user_id=user_id) }}" method="post">
+          <label for="symbol">Ticker Symbol</label>
+          <input type="text" id="symbol" name="symbol" required>
 
-      <div class="stock-performance">
-        <h3>Stock Performance</h3>
-        <div class="chart-placeholder">[Graph Placeholder]</div>
+          <label for="shares">Number of Shares</label>
+          <input type="number" id="shares" name="shares" min="1" required>
+
+          <div class="button-row">
+            <button type="submit" name="action" value="buy">Buy</button>
+            <button type="submit" name="action" value="sell">Sell</button>
+          </div>
+        </form>
       </div>
-    </section>
-  </main>
+    </div>
+
+    <!-- list of user's holdings -->
+    <div class="holdings">
+      <h3>Your Portfolio</h3>
+      <table>
+        <tr>
+          <th>Symbol</th>
+          <th># of Shares</th>
+          <th>Value</th>
+        </tr>
+        {% if holdings %}
+          {% for stock in holdings %}
+          <tr>
+            <td><a href="#" class="fill-symbol" data-symbol="{{ stock.symbol }}">{{ stock.symbol }}</a></td>
+            <td>{{ stock.shares }}</td>
+            <td>${{ "%.2f"|format(stock.value) }}</td>
+          </tr>
+          {% endfor %}
+        {% else %}
+          <tr>
+            <td colspan="3">No holdings yet.</td>
+          </tr>
+        {% endif %}
+      </table>
+    </div>
+
+    <!-- available stocks section -->
+    <div class="stock-list">
+      <h3>Available Stocks</h3>
+      <table>
+        <tr>
+          <th>Symbol</th>
+          <th>Name</th>
+          <th>Price</th>
+        </tr>
+        {% if stock_list %}
+          {% for stock in stock_list %}
+          <tr>
+            <td><a href="#" class="fill-symbol" data-symbol="{{ stock.symbol }}">{{ stock.symbol }}</a></td>
+            <td>{{ stock.name }}</td>
+            <td>${{ "%.2f"|format(stock.price) }}</td>
+          </tr>
+          {% endfor %}
+        {% else %}
+          <tr>
+            <td colspan="3">No stock data available.</td>
+          </tr>
+        {% endif %}
+      </table>
+    </div>
+
+    <div class="stock-performance">
+      <h3>Stock Performance</h3>
+      <div class="chart-placeholder">[Graph Placeholder]</div>
+    </div>
+  </section>
+</main>
+
+<!-- JS script to make clicking symbol in list fill in buy/sell input -->
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+  document.querySelectorAll(".fill-symbol").forEach(link => {
+    link.addEventListener("click", function(e) {
+      e.preventDefault();
+      const symbol = this.getAttribute("data-symbol");
+      const input = document.getElementById("symbol");
+      if (input) {
+        input.value = symbol;
+        input.focus();
+      }
+    });
+  });
+});
+</script>
+
 
   <footer>
     <p>&copy; 2025 EquiSense</p>

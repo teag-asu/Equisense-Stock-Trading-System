@@ -7,31 +7,66 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
 </head>
 <body>
-  <header>
-    <h1>EquiSense</h1>
-    <nav>
-      <ul>
-        <li><a href="{{ url_for('login') }}">Login</a></li>
-        <li><a href="{{ url_for('dashboard', user_id=1) }}">Trading Dashboard</a></li>
-        <li><a href="{{ url_for('login') }}">Admin Panel</a></li>
-      </ul>
-    </nav>
-  </header>
+	<header>
+	  <h1>EquiSense</h1>
+	  <nav>
+		<ul>
+		  <li><a href="{{ url_for('dashboard', user_id=user_id) }}">Trading Dashboard</a></li>
+		  <li><a href="{{ url_for('admin') }}">Admin Panel</a></li>
+		</ul>
+	  </nav>
 
-  <main>
-    <section class="panel">
-      <h2>Administrator Panel</h2>
-      <ul>
-        <li><button>Create New Stock</button></li>
-        <li><button>Change Market Hours</button></li>
-        <li><button>Set Market Schedule</button></li>
-        <li><button>View System Logs/Notifications</button></li>
-      </ul>
-    </section>
-  </main>
+	  <div class="user-info">
+		<p>Logged in as: <strong>{{ user['username'] }}</strong></p>
+		<form action="{{ url_for('logout') }}" method="post">
+		  <button type="submit">Log Out</button>
+		</form>
+	  </div>
+	</header>
 
-  <footer>
-    <p>&copy; 2025 EquiSense</p>
-  </footer>
+	<main>
+		{% with messages = get_flashed_messages(with_categories=true) %}
+		  {% if messages %}
+			<div class="flash-messages">
+			  {% for category, message in messages %}
+				<div class="flash {{ category }}">{{ message }}</div>
+			  {% endfor %}
+			</div>
+		  {% endif %}
+		{% endwith %}
+
+		<section class="panel">
+		  <h2>Administrator Panel</h2>
+
+		  <h3>Create New Stock</h3>
+		  <form action="{{ url_for('create_stock') }}" method="POST" class="stock-form">
+			<label for="symbol">Ticker Symbol</label>
+			<input type="text" id="symbol" name="symbol" placeholder="e.g. AAPL" required>
+
+			<label for="company_name">Company Name</label>
+			<input type="text" id="company_name" name="company_name" placeholder="e.g. Apple Inc." required>
+
+			<label for="total_volume">Total Volume</label>
+			<input type="number" id="total_volume" name="total_volume" placeholder="e.g. 1000000" required>
+
+			<label for="price">Initial Price (USD)</label>
+			<input type="number" id="price" name="price" step="0.01" placeholder="e.g. 150.00" required>
+
+			<button type="submit">Create Stock</button>
+		  </form>
+
+		  <hr>
+
+		  <ul>
+			<li><button>Change Market Hours</button></li>
+			<li><button>Set Market Schedule</button></li>
+			<li><button>View System Logs/Notifications</button></li>
+		  </ul>
+		</section>
+	</main>
+
+<footer>
+<p>&copy; 2025 EquiSense</p>
+</footer>
 </body>
 </html>
