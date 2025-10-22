@@ -29,16 +29,29 @@
 		{% endif %}
 	{% endwith %}
 
+    <!-- Account Summary -->
     <section class="panel">
-      <h2>Trading Dashboard</h2>
-
-      <div class="portfolio">
-        <h3>Portfolio Balance</h3>
-        <p>${{ "%.2f"|format(balance) }}</p>
+      <h2>Account Summary</h2>
+      <div class="account-summary">
+        <div class="balance-item">
+          <h3>Cash Balance</h3>
+          <p>${{ "%.2f"|format(balance) }}</p>
+        </div>
+        <div class="balance-item">
+          <h3>Portfolio Value</h3>
+          <p>${{ "%.2f"|format(portfolio|sum(attribute='value') or 0) }}</p>
+        </div>
+        <div class="balance-item">
+          <h3>Total Account Value</h3>
+          <p>${{ "%.2f"|format(balance + (portfolio|sum(attribute='value') or 0)) }}</p>
+        </div>
       </div>
+    </section>
 
+    <!-- Account Actions -->
+    <section class="panel">
+      <h2>Account Actions</h2>
       <div class="account-actions">
-        <h3>Account Actions</h3>
         <form action="{{ url_for('deposit', user_id=user_id) }}" method="post">
           <label for="deposit-amount">Deposit Amount</label>
           <input type="number" id="deposit-amount" name="amount" step="0.01" required>
@@ -51,32 +64,115 @@
           <button type="submit">Withdraw</button>
         </form>
       </div>
+    </section>
 
-      <div class="holdings">
-        <h3>List of Holdings</h3>
+    <!-- Available Stocks -->
+    <section class="panel">
+      <h2>Available Stocks</h2>
+      {% if available_stocks %}
         <table>
           <tr>
             <th>Symbol</th>
-            <th># of Shares</th>
-            <th>Value</th>
+            <th>Company</th>
+            <th>Current Price</th>
+            <th>Action</th>
           </tr>
-          <tr>
-            <td>---</td>
-            <td>0</td>
-            <td>$0.00</td>
-          </tr>
+          {% for stock in available_stocks %}
+            <tr>
+              <td>{{ stock.symbol }}</td>
+              <td>{{ stock.company_name }}</td>
+              <td>${{ "%.2f"|format(stock.price) }}</td>
+              <td>
+                <form action="{{ url_for('buy_stock', user_id=user_id) }}" method="post" style="display: inline;">
+                  <input type="hidden" name="stock_id" value="{{ stock.stock_id }}">
+                  <input type="number" name="quantity" placeholder="Qty" min="1" required style="width: 60px;">
+                  <button type="submit">Buy</button>
+                </form>
+              </td>
+            </tr>
+          {% endfor %}
         </table>
-      </div>
+      {% else %}
+        <p>No stocks available. Admin needs to add stocks to the system.</p>
+      {% endif %}
+    </section>
 
-      <div class="trade-actions">
-        <button>Buy</button>
-        <button>Sell</button>
-      </div>
+    <!-- My Holdings -->
+    <section class="panel">
+      <h2>My Holdings</h2>
+      {% if portfolio %}
+        <table>
+          <tr>
+            <th>Symbol</th>
+            <th>Company</th>
+            <th>Shares</th>
+            <th>Avg Cost</th>
+            <th>Current Price</th>
+            <th>Market Value</th>
+            <th>P/L</th>
+            <th>Action</th>
+          </tr>
+          {% for holding in portfolio %}
+            <tr>
+              <td>{{ holding.symbol }}</td>
+              <td>{{ holding.company_name }}</td>
+              <td>{{ holding.quantity }}</td>
+              <td>${{ "%.2f"|format(holding.avg_cost or 0) }}</td>
+              <td>${{ "%.2f"|format(holding.current_price) }}</td>
+              <td>${{ "%.2f"|format(holding.value) }}</td>
+              <td class="{% if holding.unrealized_pl >= 0 %}positive{% else %}negative{% endif %}">
+                ${{ "%.2f"|format(holding.unrealized_pl or 0) }}
+              </td>
+              <td>
+                <form action="{{ url_for('sell_stock', user_id=user_id) }}" method="post" style="display: inline;">
+                  <input type="hidden" name="stock_id" value="{{ holding.stock_id }}">
+                  <input type="number" name="quantity" placeholder="Qty" min="1" max="{{ holding.quantity }}" required style="width: 60px;">
+                  <button type="submit">Sell</button>
+                </form>
+              </td>
+            </tr>
+          {% endfor %}
+        </table>
+      {% else %}
+        <p>No holdings yet. Buy some stocks to get started!</p>
+      {% endif %}
+    </section>
 
-      <div class="stock-performance">
-        <h3>Stock Performance</h3>
-        <div class="chart-placeholder">[Graph Placeholder]</div>
-      </div>
+    <!-- Transaction History -->
+    <section class="panel">
+      <h2>Transaction History</h2>
+      {% if transaction_history %}
+        <table>
+          <tr>
+            <th>Date</th>
+            <th>Type</th>
+            <th>Symbol</th>
+            <th>Quantity</th>
+            <th>Price</th>
+            <th>Total Value</th>
+            <th>Cash After</th>
+          </tr>
+          {% for transaction in transaction_history %}
+            <tr>
+              {# <td>{{ transaction.timestamp.strftime('%Y-%m-%d %H:%M') }}</td> #}
+              <td>{{ transaction.timestamp }}</td>
+              
+              <td>{{ transaction.timestamp }}</td>
+
+              <td class="{% if transaction.order_type == 'BUY' %}buy{% else %}sell{% endif %}">
+                {{ transaction.order_type }}
+              </td>
+              <td>{{ transaction.symbol }}</td>
+              <td>{{ transaction.quantity }}</td>
+              <td>${{ "%.2f"|format(transaction.price) }}</td>
+              <td>${{ "%.2f"|format(transaction.quantity * transaction.price) }}</td>
+              <td>${{ "%.2f"|format(transaction.cash_after) }}</td>
+            </tr>
+          {% endfor %}
+        </table>
+      {% else %}
+        <p>No transactions yet. Start trading to see your history!</p>
+      {% endif %}
     </section>
   </main>
 

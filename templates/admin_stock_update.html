@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EquiSense - Update Stock Prices</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+  <!-- Navigation Header -->
+  <nav class="navbar">
+    <div class="nav-container">
+      <div class="nav-brand">
+        <i class="fas fa-chart-line"></i>
+        <span>EquiSense</span>
+      </div>
+      <div class="nav-menu">
+        <a href="{{ url_for('dashboard', user_id=1) }}" class="nav-link">
+          <i class="fas fa-tachometer-alt"></i> Dashboard
+        </a>
+        <a href="{{ url_for('admin') }}" class="nav-link">
+          <i class="fas fa-cog"></i> Admin
+        </a>
+        <div class="user-info">
+          <i class="fas fa-user-shield"></i>
+          <span>Administrator</span>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Flash Messages -->
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      <div class="flash-container">
+        {% for category, message in messages %}
+          <div class="flash-message flash-{{ category }}">
+            <i class="fas fa-{{ 'check-circle' if category == 'success' else 'exclamation-circle' }}"></i>
+            {{ message }}
+          </div>
+        {% endfor %}
+      </div>
+    {% endif %}
+  {% endwith %}
+
+  <!-- Main Content -->
+  <main class="dashboard-container">
+    <div class="welcome-section">
+      <h1>Update Stock Prices</h1>
+      <p>Modify stock prices in the system</p>
+    </div>
+
+    <div class="content-grid">
+      <div class="card">
+        <div class="card-header">
+          <h2><i class="fas fa-edit"></i> Update Stock Price</h2>
+        </div>
+        <div class="card-content">
+          <form action="{{ url_for('admin_stock_update') }}" method="post" class="update-form">
+            <div class="form-group">
+              <label for="stock_id">
+                <i class="fas fa-chart-line"></i> Select Stock
+              </label>
+              <select id="stock_id" name="stock_id" required>
+                <option value="">Choose a stock...</option>
+                {% for stock in stocks %}
+                  <option value="{{ stock.stock_id }}">{{ stock.symbol }} - {{ stock.company_name }} (Current: ${{ "%.2f"|format(stock.price) }})</option>
+                {% endfor %}
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label for="new_price">
+                <i class="fas fa-dollar-sign"></i> New Price
+              </label>
+              <div class="input-group">
+                <span class="input-prefix">$</span>
+                <input type="number" id="new_price" name="new_price" step="0.01" placeholder="0.00" min="0" required>
+              </div>
+            </div>
+
+            <div class="form-actions">
+              <button type="submit" class="btn btn-success">
+                <i class="fas fa-save"></i> Update Price
+              </button>
+              <a href="{{ url_for('admin_stocks') }}" class="btn btn-secondary">
+                <i class="fas fa-arrow-left"></i> Back to Stocks
+              </a>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <h2><i class="fas fa-list"></i> Current Stocks</h2>
+        </div>
+        <div class="card-content">
+          {% if stocks %}
+            <div class="stocks-list">
+              {% for stock in stocks %}
+                <div class="stock-item">
+                  <div class="stock-info">
+                    <span class="stock-symbol">{{ stock.symbol }}</span>
+                    <span class="stock-name">{{ stock.company_name }}</span>
+                  </div>
+                  <div class="stock-price">${{ "%.2f"|format(stock.price) }}</div>
+                </div>
+              {% endfor %}
+            </div>
+          {% else %}
+            <div class="empty-state">
+              <i class="fas fa-chart-line"></i>
+              <h3>No Stocks Available</h3>
+              <p>Create stocks first before updating prices</p>
+              <a href="{{ url_for('admin_stock_create') }}" class="btn btn-primary">
+                <i class="fas fa-plus"></i> Create Stock
+              </a>
+            </div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <div class="footer-content">
+      <p>&copy; 2025 EquiSense. All rights reserved.</p>
+      <div class="footer-links">
+        <a href="#">Privacy</a>
+        <a href="#">Terms</a>
+        <a href="#">Support</a>
+      </div>
+    </div>
+  </footer>
+</body>
+</html>

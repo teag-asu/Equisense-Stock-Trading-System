@@ -131,3 +131,115 @@ footer {
   color: #721c24;
   border: 1px solid #f5c6cb;
 }
+
+/* Admin link styles */
+.admin-link {
+  display: block;
+  padding: 0.6em 1em;
+  background: #1e2a38;
+  color: #fff !important;
+  text-decoration: none;
+  border-radius: 4px;
+  margin: 0.5em 0;
+  transition: background-color 0.3s ease;
+  text-align: center;
+  font-weight: bold;
+}
+
+.admin-link:hover {
+  background: #33475b;
+  color: #fff !important;
+}
+
+/* Ensure admin links are visible */
+.panel ul li {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.panel ul {
+  padding: 0;
+  margin: 0;
+}
+
+/* Dashboard trading styles */
+.account-summary {
+  display: flex;
+  gap: 2em;
+  margin: 1em 0;
+}
+
+.balance-item {
+  flex: 1;
+  text-align: center;
+  padding: 1em;
+  background: #f8f9fa;
+  border-radius: 4px;
+  border: 1px solid #e9ecef;
+}
+
+.balance-item h3 {
+  margin-bottom: 0.5em;
+  color: #495057;
+  font-size: 0.9em;
+}
+
+.balance-item p {
+  font-size: 1.5em;
+  font-weight: bold;
+  color: #1e2a38;
+  margin: 0;
+}
+
+/* Trading form styles */
+form[style*="display: inline"] {
+  display: inline-flex;
+  gap: 0.5em;
+  align-items: center;
+}
+
+form[style*="display: inline"] input[type="number"] {
+  width: 60px;
+  padding: 0.3em;
+  font-size: 0.9em;
+}
+
+form[style*="display: inline"] button {
+  padding: 0.3em 0.8em;
+  font-size: 0.9em;
+}
+
+/* Trading table styles */
+.positive {
+  color: #28a745;
+  font-weight: bold;
+}
+
+.negative {
+  color: #dc3545;
+  font-weight: bold;
+}
+
+.buy {
+  color: #28a745;
+  font-weight: bold;
+}
+
+.sell {
+  color: #dc3545;
+  font-weight: bold;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .account-summary {
+    flex-direction: column;
+    gap: 1em;
+  }
+  
+  form[style*="display: inline"] {
+    flex-direction: column;
+    gap: 0.3em;
+  }
+}
