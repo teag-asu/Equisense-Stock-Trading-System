@@ -1,72 +1,181 @@
-<!DOCTYPE html>
+<!-- <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>EquiSense - Admin Panel</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+  <style>
+    /* Inline admin link styles to ensure they work */
+    .admin-link {
+      display: block !important;
+      padding: 0.6em 1em !important;
+      background: #1e2a38 !important;
+      color: #fff !important;
+      text-decoration: none !important;
+      border-radius: 4px !important;
+      margin: 0.5em 0 !important;
+      transition: background-color 0.3s ease !important;
+      text-align: center !important;
+      font-weight: bold !important;
+    }
+    .admin-link:hover {
+      background: #33475b !important;
+      color: #fff !important;
+    }
+    .panel ul li {
+      list-style: none !important;
+      margin: 0 !important;
+      padding: 0 !important;
+    }
+    .panel ul {
+      padding: 0 !important;
+      margin: 0 !important;
+    }
+  </style>
 </head>
 <body>
-	<header>
-	  <h1>EquiSense</h1>
-	  <nav>
-		<ul>
-		  <li><a href="{{ url_for('dashboard', user_id=user_id) }}">Trading Dashboard</a></li>
-		  <li><a href="{{ url_for('admin') }}">Admin Panel</a></li>
-		</ul>
-	  </nav>
+  <header>
+    <h1>EquiSense</h1>
+    <nav>
+      <ul>
+        <li><a href="{{ url_for('login') }}">Login</a></li>
+        <li><a href="{{ url_for('dashboard', user_id=1) }}">Trading Dashboard</a></li>
+        <li><a href="{{ url_for('login') }}">Admin Panel</a></li>
+      </ul>
+    </nav>
+  </header>
 
-	  <div class="user-info">
-		<p>Logged in as: <strong>{{ user['username'] }}</strong></p>
-		<form action="{{ url_for('logout') }}" method="post">
-		  <button type="submit">Log Out</button>
-		</form>
-	  </div>
-	</header>
+  <main>
+    <section class="panel">
+      <h2>Administrator Panel</h2>
+      <ul>
+        <li><a href="{{ url_for('admin_stock_create') }}" class="admin-link">Create New Stock</a></li>
+        <li><a href="{{ url_for('admin_market_hours') }}" class="admin-link">Change Market Hours</a></li>
+        <li><a href="{{ url_for('admin_market_schedule') }}" class="admin-link">Set Market Schedule</a></li>
+        <li><a href="{{ url_for('admin_logs') }}" class="admin-link">View System Logs/Notifications</a></li>
+        <li><a href="{{ url_for('admin_users') }}" class="admin-link">Manage Users</a></li>
+        <li><a href="{{ url_for('admin_stocks') }}" class="admin-link">View All Stocks</a></li>
+        <li><a href="{{ url_for('admin_stock_update') }}" class="admin-link">Update Stock Prices</a></li>
+        <li><a href="{{ url_for('admin_settings') }}" class="admin-link">System Settings</a></li>
+      </ul>
+    </section>
+  </main>
 
-	<main>
-		{% with messages = get_flashed_messages(with_categories=true) %}
-		  {% if messages %}
-			<div class="flash-messages">
-			  {% for category, message in messages %}
-				<div class="flash {{ category }}">{{ message }}</div>
-			  {% endfor %}
-			</div>
-		  {% endif %}
-		{% endwith %}
+  <footer>
+    <p>&copy; 2025 EquiSense</p>
+  </footer>
+</body>
+</html> -->
 
-		<section class="panel">
-		  <h2>Administrator Panel</h2>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>EquiSense - Admin Panel</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+  <header>
+    <h1>EquiSense</h1>
+    <nav>
+      <ul>
+        {# <li><a href="{{ url_for('dashboard', user_id=user_id if 'user_id' in globals() else 1) }}">Trading Dashboard</a></li> #}
+        <a href="{{ url_for('dashboard', user_id=1) }}">Trading Dashboard</a>
+        <li><a href="{{ url_for('admin') }}">Admin Panel</a></li>
+      </ul>
+    </nav>
+	
+  </header>
 
-		  <h3>Create New Stock</h3>
-		  <form action="{{ url_for('create_stock') }}" method="POST" class="stock-form">
-			<label for="symbol">Ticker Symbol</label>
-			<input type="text" id="symbol" name="symbol" placeholder="e.g. AAPL" required>
+  <main>
+    {# Optional flash area #}
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        <div class="flash-messages">
+          {% for category, message in messages %}
+            <div class="flash {{ category }}">{{ message }}</div>
+          {% endfor %}
+        </div>
+      {% endif %}
+    {% endwith %}
 
-			<label for="company_name">Company Name</label>
-			<input type="text" id="company_name" name="company_name" placeholder="e.g. Apple Inc." required>
+    <section class="panel">
+      <h2>Administrator Panel</h2>
+      <ul class="admin-grid">
+        <li><a href="{{ url_for('admin_stock_create') }}" class="admin-link" data-modal-title="Create New Stock">Create New Stock</a></li>
+        <li><a href="{{ url_for('admin_market_hours') }}" class="admin-link" data-modal-title="Change Market Hours">Change Market Hours</a></li>
+        <li><a href="{{ url_for('admin_market_schedule') }}" class="admin-link" data-modal-title="Set Market Schedule">Set Market Schedule</a></li>
+        <li><a href="{{ url_for('admin_logs') }}" class="admin-link" data-modal-title="System Logs & Notifications">View System Logs/Notifications</a></li>
+        <li><a href="{{ url_for('admin_users') }}" class="admin-link" data-modal-title="Manage Users">Manage Users</a></li>
+        <li><a href="{{ url_for('admin_stocks') }}" class="admin-link" data-modal-title="All Stocks">View All Stocks</a></li>
+        <li><a href="{{ url_for('admin_stock_update') }}" class="admin-link" data-modal-title="Update Stock Prices">Update Stock Prices</a></li>
+        <li><a href="{{ url_for('admin_settings') }}" class="admin-link" data-modal-title="System Settings">System Settings</a></li>
+      </ul>
+    </section>
 
-			<label for="total_volume">Total Volume</label>
-			<input type="number" id="total_volume" name="total_volume" placeholder="e.g. 1000000" required>
+    <!-- Modal -->
+    <dialog id="adminModal" class="modal">
+      <div class="modal-header">
+        <h3 id="modalTitle">Loading…</h3>
+        <button class="modal-close" aria-label="Close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <iframe id="modalFrame" title="Admin Tool" loading="lazy"></iframe>
+      </div>
+    </dialog>
+  </main>
 
-			<label for="price">Initial Price (USD)</label>
-			<input type="number" id="price" name="price" step="0.01" placeholder="e.g. 150.00" required>
+  <footer>
+    <p>&copy; 2025 EquiSense</p>
+  </footer>
 
-			<button type="submit">Create Stock</button>
-		  </form>
+  <!-- Minimal JS to load admin routes inside modal -->
+  <script>
+    (function () {
+      const modal = document.getElementById('adminModal');
+      const frame = document.getElementById('modalFrame');
+      const titleEl = document.getElementById('modalTitle');
+      const closeBtn = modal.querySelector('.modal-close');
 
-		  <hr>
+      function openModal(href, titleText) {
+        titleEl.textContent = titleText || 'Admin Tool';
+        frame.src = href;
+        if (typeof modal.showModal === 'function') {
+          modal.showModal();
+        } else {
+          modal.setAttribute('open', 'open'); // fallback
+        }
+      }
 
-		  <ul>
-			<li><button>Change Market Hours</button></li>
-			<li><button>Set Market Schedule</button></li>
-			<li><button>View System Logs/Notifications</button></li>
-		  </ul>
-		</section>
-	</main>
+      function closeModal() {
+        frame.src = 'about:blank';
+        if (typeof modal.close === 'function') {
+          modal.close();
+        } else {
+          modal.removeAttribute('open');
+        }
+      }
 
-<footer>
-<p>&copy; 2025 EquiSense</p>
-</footer>
+      // Intercept clicks on admin links
+      document.addEventListener('click', function (e) {
+        const link = e.target.closest('a.admin-link');
+        if (!link) return;
+
+        // allow new tab / modifiers
+        if (e.metaKey || e.ctrlKey || e.shiftKey || e.button === 1) return;
+
+        e.preventDefault();
+        openModal(link.getAttribute('href'), link.getAttribute('data-modal-title'));
+      });
+
+      // Close handlers
+      closeBtn.addEventListener('click', closeModal);
+      modal.addEventListener('cancel', (e) => { e.preventDefault(); closeModal(); }); // ESC
+      modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); }); // backdrop
+    })();
+  </script>
 </body>
 </html>
+

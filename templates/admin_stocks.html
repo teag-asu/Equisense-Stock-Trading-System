@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EquiSense - Stock Management</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+  <!-- Flash Messages -->
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      <div class="flash-container">
+        {% for category, message in messages %}
+          <div class="flash-message flash-{{ category }}">
+            <i class="fas fa-{{ 'check-circle' if category == 'success' else 'exclamation-circle' }}"></i>
+            {{ message }}
+          </div>
+        {% endfor %}
+      </div>
+    {% endif %}
+  {% endwith %}
+
+  <!-- Main Content -->
+  <main class="dashboard-container">
+    <div class="welcome-section">
+      <h1>Stock Management</h1>
+      <p>Manage stocks and their prices in the system</p>
+    </div>
+
+    <div class="content-grid">
+      <div class="card">
+        <div class="card-header">
+          <h2><i class="fas fa-chart-line"></i> All Stocks</h2>
+          <div class="card-actions">
+            <a href="{{ url_for('admin_stock_create') }}" class="btn btn-primary">
+              <i class="fas fa-plus"></i> Create Stock
+            </a>
+            <a href="{{ url_for('admin_stock_update') }}" class="btn btn-secondary">
+              <i class="fas fa-edit"></i> Update Prices
+            </a>
+          </div>
+        </div>
+        <div class="card-content">
+          {% if stocks %}
+            <div class="stocks-table">
+              <table>
+                <thead>
+                  <tr>
+                    <th>ID</th>
+                    <th>Symbol</th>
+                    <th>Company</th>
+                    <th>Price</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for stock in stocks %}
+                    <tr>
+                      <td>{{ stock.stock_id }}</td>
+                      <td class="symbol-cell">
+                        <span class="symbol">{{ stock.symbol }}</span>
+                      </td>
+                      <td>{{ stock.company_name }}</td>
+                      <td class="price-cell">${{ "%.2f"|format(stock.price) }}</td>
+                      <td class="actions-cell">
+                        <button class="btn-icon" title="Edit Stock">
+                          <i class="fas fa-edit"></i>
+                        </button>
+                        <button class="btn-icon" title="View Details">
+                          <i class="fas fa-eye"></i>
+                        </button>
+                        <button class="btn-icon" title="Delete Stock">
+                          <i class="fas fa-trash"></i>
+                        </button>
+                      </td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          {% else %}
+            <div class="empty-state">
+              <i class="fas fa-chart-line"></i>
+              <h3>No Stocks Found</h3>
+              <p>No stocks have been added to the system yet</p>
+              <a href="{{ url_for('admin_stock_create') }}" class="btn btn-primary">
+                <i class="fas fa-plus"></i> Create First Stock
+              </a>
+            </div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </main>
+</body>
+</html>

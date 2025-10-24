@@ -107,7 +107,6 @@ footer {
   margin-top: 2em;
 }
 
-/* stuff for flash */
 .flash-messages {
   margin: 1em auto;
   max-width: 600px;
@@ -133,97 +132,119 @@ footer {
   border: 1px solid #f5c6cb;
 }
 
-/* create stock form */
-.stock-form {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  margin-bottom: 20px;
-  max-width: 400px;
-}
-
-.stock-form input, .stock-form button {
-  padding: 8px;
-  font-size: 1rem;
-}
-
-.stock-form button {
-  background-color: #0074cc;
-  color: white;
-  border: none;
-  border-radius: 5px;
-  cursor: pointer;
-}
-
-.stock-form button:hover {
-  background-color: #005fa3;
-}
-
-/* form layout and button alignment */
-.form-section {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: space-between;
-  gap: 2rem;
-}
-
-.form-section > div {
-  flex: 1 1 45%;
-  background-color: #f9f9f9;
-  padding: 1rem;
-  border-radius: 10px;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
-}
-
-.button-row {
-  display: flex;
-  justify-content: space-between;
-  margin-top: 0.5rem;
-}
-
-.button-row button {
-  width: 48%;
-}
-
-/* adjust small screens */
-@media (max-width: 768px) {
-  .form-section {
-    flex-direction: column;
-  }
-  .form-section > div {
-    width: 100%;
-  }
-}
-
-/* stock list stuff */
-
-.stock-list, .holdings {
-  margin-top: 20px;
-}
-
-.stock-list table, .holdings table {
-  width: 100%;
-  border-collapse: collapse;
-}
-
-.stock-list th, .stock-list td,
-.holdings th, .holdings td {
-  border: 1px solid #ccc;
-  padding: 8px;
-  text-align: center;
-}
-
-.fill-symbol {
-  color: #007bff;
+/* Admin link styles */
+.admin-link {
+  display: block;
+  padding: 0.6em 1em;
+  background: #1e2a38;
+  color: #fff !important;
   text-decoration: none;
+  border-radius: 4px;
+  margin: 0.5em 0;
+  transition: background-color 0.3s ease;
+  text-align: center;
+  font-weight: bold;
 }
 
-.fill-symbol:hover {
-  text-decoration: underline;
-  cursor: pointer;
+.admin-link:hover {
+  background: #33475b;
+  color: #fff !important;
 }
 
-/*user panel */
+/* Ensure admin links are visible */
+.panel ul li {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.panel ul {
+  padding: 0;
+  margin: 0;
+}
+
+/* Dashboard trading styles */
+.account-summary {
+  display: flex;
+  gap: 2em;
+  margin: 1em 0;
+}
+
+.balance-item {
+  flex: 1;
+  text-align: center;
+  padding: 1em;
+  background: #f8f9fa;
+  border-radius: 4px;
+  border: 1px solid #e9ecef;
+}
+
+.balance-item h3 {
+  margin-bottom: 0.5em;
+  color: #495057;
+  font-size: 0.9em;
+}
+
+.balance-item p {
+  font-size: 1.5em;
+  font-weight: bold;
+  color: #1e2a38;
+  margin: 0;
+}
+
+/* Trading form styles */
+form[style*="display: inline"] {
+  display: inline-flex;
+  gap: 0.5em;
+  align-items: center;
+}
+
+form[style*="display: inline"] input[type="number"] {
+  width: 60px;
+  padding: 0.3em;
+  font-size: 0.9em;
+}
+
+form[style*="display: inline"] button {
+  padding: 0.3em 0.8em;
+  font-size: 0.9em;
+}
+
+/* Trading table styles */
+.positive {
+  color: #28a745;
+  font-weight: bold;
+}
+
+.negative {
+  color: #dc3545;
+  font-weight: bold;
+}
+
+.buy {
+  color: #28a745;
+  font-weight: bold;
+}
+
+.sell {
+  color: #dc3545;
+  font-weight: bold;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .account-summary {
+    flex-direction: column;
+    gap: 1em;
+  }
+  
+  form[style*="display: inline"] {
+    flex-direction: column;
+    gap: 0.3em;
+  }
+}
+
+/*user/logout panel */
 .user-info {
   position: absolute;
   top: 10px;
@@ -248,4 +269,95 @@ footer {
 
 .user-info button:hover {
   background-color: #e74c3c;
+}
+
+/*admin page stuff*/
+
+    /* Base */
+*{margin:0;padding:0;box-sizing:border-box;font-family:Arial, sans-serif}
+body{background:#f4f4f4;color:#333}
+header{background:#1e2a38;color:#fff;padding:1em;text-align:center}
+header h1{margin-bottom:.5em}
+nav ul{list-style:none;display:flex;justify-content:center;gap:1em}
+nav a{color:#fff;text-decoration:none}
+main{padding:2em}
+footer{text-align:center;padding:1em;background:#1e2a38;color:#fff;margin-top:2em}
+
+/* Panel */
+.panel{background:#fff;padding:1.5em;margin-bottom:2em;border-radius:8px;box-shadow:0 2px 6px rgba(0,0,0,.1)}
+.panel ul{padding:0;margin:0}
+.panel ul li{list-style:none;margin:0;padding:0}
+
+/* Two-column grid for admin actions */
+.admin-grid{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(240px,1fr));
+  gap:1rem 1.25rem;
+  margin-top:1rem;
+}
+
+/* Admin action card links */
+.admin-link{
+  display:block;
+  padding:.85em 1em;
+  background:#1e2a38;
+  color:#fff!important;
+  text-decoration:none!important;
+  border-radius:8px;
+  text-align:center;
+  font-weight:700;
+  transition:transform .06s ease, background-color .2s ease, box-shadow .2s ease;
+  box-shadow:0 1px 3px rgba(0,0,0,.08);
+}
+.admin-link:hover{
+  background:#2a3b50;
+  box-shadow:0 2px 8px rgba(0,0,0,.12);
+  transform:translateY(-1px);
+  color:#fff!important;
+}
+.admin-link:active{transform:translateY(0)}
+
+/* Flash (optional if you use flash messages here) */
+.flash-messages{margin:1em auto;max-width:600px;text-align:center}
+.flash{padding:10px 15px;margin:10px 0;border-radius:6px;font-weight:500}
+.flash.success{background:#d4edda;color:#155724;border:1px solid #c3e6cb}
+.flash.error{background:#f8d7da;color:#721c24;border:1px solid #f5c6cb}
+
+/* Modal dialog */
+/* Center the dialog itself even in non-showModal fallback */
+dialog.modal[open] {
+  position: fixed;
+  inset: 0;         /* top:0 right:0 bottom:0 left:0 */
+  margin: auto;     /* centers the dialog box */
+}
+
+/* Modal box sizing */
+dialog.modal{
+  width: 92vw;
+  max-width: 1000px;
+  border: none;
+  border-radius: 10px;
+  padding: 0;
+  overflow: hidden;
+  box-shadow: 0 10px 30px rgba(0,0,0,.25);
+}
+
+/* Center the iframe inside the modal */
+.modal-body{
+  background:#fff;
+  height: min(80vh, 760px);
+  padding: 0;
+  display: flex;                  /* ⬅ key */
+  align-items: center;            /* ⬅ vertical center */
+  justify-content: center;        /* ⬅ horizontal center */
+}
+
+/* Iframe sizing; stays centered */
+#modalFrame{
+  display: block;
+  border: 0;
+  width: min(960px, 90vw);
+  height: min(72vh, 700px);
+  border-radius: 6px;             /* optional: soften iframe edges */
+  background: #fff;
 }

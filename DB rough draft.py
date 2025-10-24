@@ -44,16 +44,14 @@ CREATE TABLE IF NOT EXISTS orders (
 
 # Create Portfolio table (tracks owned stocks)
 cursor.execute('''
-CREATE TABLE IF NOT EXISTS portfolio(
-    PORTFOLIO_ID INTEGER PRIMARY KEY AUTOINCREMENT,
-    USER_ID INTEGER NOT NULL,
-    STOCK_ID INTEGER NOT NULL,
-    QUANTITY INTEGER NOT NULL CHECK (QUANTITY >= 0),
-    UNIQUE(USER_ID, STOCK_ID),
-    FOREIGN KEY (USER_ID) REFERENCES USERS(USER_ID),
-    FOREIGN KEY (STOCK_ID) REFERENCES STOCKS(STOCK_ID)
+CREATE TABLE IF NOT EXISTS portfolio (
+    portfolio_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    stock_id INTEGER NOT NULL,
+    quantity INTEGER DEFAULT 0,
+    FOREIGN KEY (user_id) REFERENCES users(user_id),
+    FOREIGN KEY (stock_id) REFERENCES stocks(stock_id)
 );
-
 ''')
 
 # Commit changes and close connection

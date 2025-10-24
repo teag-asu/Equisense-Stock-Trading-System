@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EquiSense - Create Stock</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+  <!-- Flash Messages -->
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      <div class="flash-container">
+        {% for category, message in messages %}
+          <div class="flash-message flash-{{ category }}">
+            <i class="fas fa-{{ 'check-circle' if category == 'success' else 'exclamation-circle' }}"></i>
+            {{ message }}
+          </div>
+        {% endfor %}
+      </div>
+    {% endif %}
+  {% endwith %}
+
+  <!-- Main Content -->
+  <main class="dashboard-container">
+    <div class="welcome-section">
+      <h1>Create New Stock</h1>
+      <p>Add a new stock to the trading system</p>
+    </div>
+
+    <div class="content-grid">
+      <div class="card">
+        <div class="card-header">
+          <h2><i class="fas fa-chart-line"></i> Stock Information</h2>
+        </div>
+        <div class="card-content">
+          <form action="{{ url_for('admin_stock_create') }}" method="post" class="stock-form">
+            <div class="form-group">
+              <label for="symbol">
+                <i class="fas fa-tag"></i> Stock Symbol
+              </label>
+              <input type="text" id="symbol" name="symbol" placeholder="e.g., AAPL, GOOGL, MSFT" required style="text-transform: uppercase;">
+              <small>Enter the stock ticker symbol (will be converted to uppercase)</small>
+            </div>
+
+            <div class="form-group">
+              <label for="company_name">
+                <i class="fas fa-building"></i> Company Name
+              </label>
+              <input type="text" id="company_name" name="company_name" placeholder="Enter full company name" required>
+            </div>
+
+            <div class="form-group">
+              <label for="price">
+                <i class="fas fa-dollar-sign"></i> Initial Price
+              </label>
+              <div class="input-group">
+                <span class="input-prefix">$</span>
+                <input type="number" id="price" name="price" step="0.01" placeholder="0.00" min="0" required>
+              </div>
+            </div>
+
+            <div class="form-actions">
+              <button type="submit" class="btn btn-success">
+                <i class="fas fa-plus-circle"></i> Create Stock
+              </button>
+              <a href="{{ url_for('admin_stocks') }}" class="btn btn-secondary">
+                <i class="fas fa-arrow-left"></i> Back to Stocks
+              </a>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <h2><i class="fas fa-info-circle"></i> Stock Creation Guidelines</h2>
+        </div>
+        <div class="card-content">
+          <div class="info-list">
+            <div class="info-item">
+              <i class="fas fa-check-circle"></i>
+              <div>
+                <strong>Stock Symbol</strong>
+                <p>Use standard ticker symbols (e.g., AAPL for Apple Inc.)</p>
+              </div>
+            </div>
+            <div class="info-item">
+              <i class="fas fa-check-circle"></i>
+              <div>
+                <strong>Company Name</strong>
+                <p>Enter the full legal company name</p>
+              </div>
+            </div>
+            <div class="info-item">
+              <i class="fas fa-check-circle"></i>
+              <div>
+                <strong>Initial Price</strong>
+                <p>Set a realistic starting price for the stock</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+</body>
+</html>

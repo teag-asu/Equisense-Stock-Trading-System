@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EquiSense - Market Hours</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+  <main>
+    <section class="panel">
+      <h2>Market Hours Configuration</h2>
+      <p>Configure trading hours for the stock market.</p>
+      
+      <form>
+        <div>
+          <label for="market-open">Market Open Time:</label>
+          <input type="time" id="market-open" name="market-open" value="09:30">
+        </div>
+        
+        <div>
+          <label for="market-close">Market Close Time:</label>
+          <input type="time" id="market-close" name="market-close" value="16:00">
+        </div>
+        
+        <div>
+          <label for="timezone">Timezone:</label>
+          <select id="timezone" name="timezone">
+            <option value="EST">Eastern Standard Time (EST)</option>
+            <option value="PST">Pacific Standard Time (PST)</option>
+            <option value="CST">Central Standard Time (CST)</option>
+            <option value="MST">Mountain Standard Time (MST)</option>
+          </select>
+        </div>
+        
+        <div class="buttons">
+          <button type="submit">Save Market Hours</button>
+        </div>
+      </form>
+    </section>
+  </main>
+</body>
+</html>
