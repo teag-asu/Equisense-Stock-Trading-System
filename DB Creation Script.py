@@ -14,6 +14,7 @@ CREATE TABLE IF NOT EXISTS users (
     username TEXT NOT NULL UNIQUE,
     email TEXT NOT NULL UNIQUE,
     balance REAL DEFAULT 0.0
+    password_hash TEXT NOT NULL,
 );
 ''')
 

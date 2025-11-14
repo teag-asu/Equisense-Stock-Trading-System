@@ -1,8 +1,12 @@
-from flask import Flask, render_template, request, redirect, url_for, flash
+import os
+from flask import Flask, render_template, request, redirect, url_for, flash, session
 import sqlite3
+import bcrypt
 
 app = Flask(__name__)
+
 app.secret_key = 'team34'  # needed for flash messages and session management
+#app.secret_key = os.environ.get("FLASK_SECRET_KEY", "dev_default_key") this should be used in the deployed version of the app
 
 DB_NAME = 'stock_trading.db'
 
@@ -12,6 +16,13 @@ def get_db_connection():
     conn.row_factory = sqlite3.Row
     return conn
 
+# Password hashing helpers
+def hash_password(password: str) -> str:
+    return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+
+def verify_password(password: str, hashed: str) -> bool:
+    return bcrypt.checkpw(password.encode(), hashed.encode())
+
 
 # home / login Page
 @app.route('/')
@@ -19,20 +30,21 @@ def get_db_connection():
 def login():
     if request.method == 'POST':
         username = request.form['username']
-        email = request.form['email']
+        password = request.form['password']
 
         conn = get_db_connection()
         user = conn.execute(
-            'SELECT * FROM users WHERE username = ? AND email = ?',
-            (username, email)
+            'SELECT * FROM users WHERE username = ?',
+            (username,)
         ).fetchone()
         conn.close()
 
-        if user:
+        if user and verify_password(password, user['password_hash']):
+            session['user_id'] = user['user_id']  # store session login
             flash(f"Welcome back, {user['username']}!", "success")
             return redirect(url_for('dashboard', user_id=user['user_id']))
         else:
-            flash("Invalid credentials or user not found.", "error")
+            flash("Invalid username or password.", "error")
             return redirect(url_for('login'))
 
     return render_template('login.html')
@@ -43,12 +55,15 @@ def login():
 def register():
     username = request.form['username']
     email = request.form['email']
+    password = request.form['password']
+
+    password_hash = hash_password(password)
 
     conn = get_db_connection()
     try:
         conn.execute(
-            'INSERT INTO users (username, email, balance) VALUES (?, ?, ?)',
-            (username, email, 0.0)
+            'INSERT INTO users (username, email, password_hash, balance) VALUES (?, ?, ?, ?)',
+            (username, email, password_hash, 0.0)
         )
         conn.commit()
         flash("Account created successfully! Please log in.", "success")
@@ -58,11 +73,12 @@ def register():
         conn.close()
 
     return redirect(url_for('login'))
-    
+
+
 # logout function
 @app.route('/logout', methods=['POST'])
 def logout():
-    # to be implemented later, since the app doesn't use sessions yet; I just wanted to put in the UI element now
+    session.pop('user_id', None)  # clear session
     flash("You have been logged out.", "success")
     return redirect(url_for('login'))
 
@@ -70,6 +86,11 @@ def logout():
 # user dashboard
 @app.route('/dashboard/<int:user_id>')
 def dashboard(user_id):
+    # Require login
+    if 'user_id' not in session or session['user_id'] != user_id:
+        flash("You must be logged in to view that page.", "error")
+        return redirect(url_for('login'))
+
     conn = get_db_connection()
     user = conn.execute('SELECT * FROM users WHERE user_id = ?', (user_id,)).fetchone()
 
@@ -119,6 +140,10 @@ def dashboard(user_id):
 # deposit function
 @app.route('/deposit/<int:user_id>', methods=['POST'])
 def deposit(user_id):
+    if 'user_id' not in session or session['user_id'] != user_id:
+        flash("Unauthorized.", "error")
+        return redirect(url_for('login'))
+
     amount = float(request.form['amount'])
     if amount <= 0:
         flash("Deposit amount must be greater than zero.", "error")
@@ -139,6 +164,10 @@ def deposit(user_id):
 # withdraw function
 @app.route('/withdraw/<int:user_id>', methods=['POST'])
 def withdraw(user_id):
+    if 'user_id' not in session or session['user_id'] != user_id:
+        flash("Unauthorized.", "error")
+        return redirect(url_for('login'))
+
     amount = float(request.form['amount'])
     if amount <= 0:
         flash("Withdrawal amount must be greater than zero.", "error")
@@ -166,10 +195,15 @@ def withdraw(user_id):
 
     flash(f"Successfully withdrew ${amount:.2f}.", "success")
     return redirect(url_for('dashboard', user_id=user_id))
-    
+
+
 # unified deposit/withdraw (so they can share an input field)
 @app.route('/depositwithdraw/<int:user_id>', methods=['POST'])
 def depositwithdraw(user_id):
+    if 'user_id' not in session or session['user_id'] != user_id:
+        flash("Unauthorized.", "error")
+        return redirect(url_for('login'))
+
     amount = float(request.form['amount'])
     action = request.form['action']
 
@@ -206,6 +240,10 @@ def depositwithdraw(user_id):
 # buy stock function
 @app.route('/buy_stock/<int:user_id>', methods=['POST'])
 def buy_stock(user_id):
+    if 'user_id' not in session or session['user_id'] != user_id:
+        flash("Unauthorized.", "error")
+        return redirect(url_for('login'))
+
     stock_id = int(request.form['stock_id'])
     quantity = int(request.form['quantity'])
     
@@ -287,6 +325,10 @@ def buy_stock(user_id):
 # sell stock function
 @app.route('/sell_stock/<int:user_id>', methods=['POST'])
 def sell_stock(user_id):
+    if 'user_id' not in session or session['user_id'] != user_id:
+        flash("Unauthorized.", "error")
+        return redirect(url_for('login'))
+
     stock_id = int(request.form['stock_id'])
     quantity = int(request.form['quantity'])
     
@@ -363,22 +405,17 @@ def sell_stock(user_id):
         conn.close()
     
     return redirect(url_for('dashboard', user_id=user_id))
-    
- # admin panel 
+
+
+# ----- ADMIN ROUTES (UNCHANGED EXCEPT SESSION CHECK OPTIONAL) -----
+
 @app.route('/admin')
 def admin():
-    """Displays a list of users and their balances for management."""
-    conn = get_db_connection()
-    users = conn.execute('SELECT user_id, username, email, balance FROM users').fetchall()
-    conn.close()
-
-    return render_template('admin.html', users=users)
+    return render_template('admin.html')
 
 
-# Admin Routes for User Management
 @app.route('/admin/users')
 def admin_users():
-    """View all users with management options."""
     conn = get_db_connection()
     users = conn.execute('SELECT user_id, username, email, balance FROM users').fetchall()
     conn.close()
@@ -387,7 +424,6 @@ def admin_users():
 
 @app.route('/admin/user/create', methods=['GET', 'POST'])
 def admin_user_create():
-    """Create a new user account."""
     if request.method == 'POST':
         username = request.form['username']
         email = request.form['email']
@@ -410,10 +446,8 @@ def admin_user_create():
     return render_template('admin_user_create.html')
 
 
-# Admin Routes for Stock Management
 @app.route('/admin/stocks')
 def admin_stocks():
-    """View all stocks in the system."""
     conn = get_db_connection()
     stocks = conn.execute('SELECT * FROM stocks').fetchall()
     conn.close()
@@ -422,8 +456,7 @@ def admin_stocks():
 
 @app.route('/admin/stock/create', methods=['GET', 'POST'])
 def admin_stock_create():
-    """Create a new stock."""
-    if request.method == 'POST':
+    if request.method == ['POST']:
         symbol = request.form['symbol'].upper()
         company_name = request.form['company_name']
         price = float(request.form['price'])
@@ -447,7 +480,6 @@ def admin_stock_create():
 
 @app.route('/admin/stock/update', methods=['GET', 'POST'])
 def admin_stock_update():
-    """Update stock prices."""
     conn = get_db_connection()
     stocks = conn.execute('SELECT * FROM stocks').fetchall()
     
@@ -467,64 +499,51 @@ def admin_stock_update():
     return render_template('admin_stock_update.html', stocks=stocks)
 
 
-# Admin Routes for Market Management
 @app.route('/admin/market/hours')
 def admin_market_hours():
-    """Configure market hours."""
     return render_template('admin_market_hours.html')
 
 
 @app.route('/admin/market/schedule')
 def admin_market_schedule():
-    """Set market schedule."""
     return render_template('admin_market_schedule.html')
 
 
 @app.route('/admin/market/status')
 def admin_market_status():
-    """Open/close markets."""
     return render_template('admin_market_status.html')
 
 
-# Admin Routes for System Management
 @app.route('/admin/logs')
 def admin_logs():
-    """View system logs."""
     return render_template('admin_logs.html')
 
 
 @app.route('/admin/notifications')
 def admin_notifications():
-    """Manage system notifications."""
     return render_template('admin_notifications.html')
 
 
 @app.route('/admin/settings')
 def admin_settings():
-    """Configure system settings."""
     return render_template('admin_settings.html')
 
 
-# Admin Routes for Analytics & Reports
 @app.route('/admin/analytics')
 def admin_analytics():
-    """View trading analytics."""
     return render_template('admin_analytics.html')
 
 
 @app.route('/admin/reports')
 def admin_reports():
-    """Generate system reports."""
     return render_template('admin_reports.html')
 
 
 @app.route('/admin/export')
 def admin_export():
-    """Export system data."""
     return render_template('admin_export.html')
-
 
 
 # run the flask app
 if __name__ == '__main__':
-    app.run(debug=True, port=5001)
+    app.run(debug=True, port=5000)
