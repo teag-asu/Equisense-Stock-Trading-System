@@ -9,13 +9,14 @@
 <body>
   <header>
     <h1>EquiSense</h1>
-    <nav>
-      <ul>
-        <li><a href="{{ url_for('dashboard', user_id=user_id) }}">Trading Dashboard</a></li>
-        <li><a href="{{ url_for('admin') }}">Admin Panel</a></li>
-      </ul>
-    </nav>
-	
+	<nav>
+	  <ul>
+		<li><a href="{{ url_for('dashboard', user_id=user_id) }}">Trading Dashboard</a></li>
+		{% if session.is_admin == 1 %}
+		  <li><a href="{{ url_for('admin') }}">Admin Panel</a></li>
+		{% endif %}
+	  </ul>
+	</nav>
 	<div class="user-info">
 		<p>Logged in as: <strong>{{ user['username'] }}</strong></p>
 		<form action="{{ url_for('logout') }}" method="post">
@@ -162,9 +163,6 @@
             <tr>
               {# <td>{{ transaction.timestamp.strftime('%Y-%m-%d %H:%M') }}</td> #}
               <td>{{ transaction.timestamp }}</td>
-              
-              <td>{{ transaction.timestamp }}</td>
-
               <td class="{% if transaction.order_type == 'BUY' %}buy{% else %}sell{% endif %}">
                 {{ transaction.order_type }}
               </td>

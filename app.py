@@ -1,8 +1,12 @@
-from flask import Flask, render_template, request, redirect, url_for, flash
+import os
+from flask import Flask, render_template, request, redirect, url_for, flash, session
 import sqlite3
+import bcrypt
 
 app = Flask(__name__)
-app.secret_key = 'team34'  # needed for flash messages and session management
+
+app.secret_key = 'team34' # needed for flash messages and session management
+#app.secret_key = os.environ.get("FLASK_SECRET_KEY", "dev_default_key") this should be used in the deployed version of the app
 
 DB_NAME = 'stock_trading.db'
 
@@ -12,30 +16,78 @@ def get_db_connection():
     conn.row_factory = sqlite3.Row
     return conn
 
+# password hashing helpers
+def hash_password(password: str) -> str:
+    return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
 
-# home / login Page
+def verify_password(password: str, hashed: str) -> bool:
+    return bcrypt.checkpw(password.encode(), hashed.encode())
+
+
+# admin helper
+def require_admin():
+    """
+    Returns None if current session user is an admin.
+    Otherwise returns a redirect response (to login or dashboard) which the caller should return.
+    """
+    if 'user_id' not in session:
+        flash("You must be logged in.", "error")
+        return redirect(url_for('login'))
+
+    conn = get_db_connection()
+    user = conn.execute(
+        'SELECT is_admin FROM users WHERE user_id = ?',
+        (session['user_id'],)
+    ).fetchone()
+    conn.close()
+
+    if not user:
+        flash("User not found.", "error")
+        return redirect(url_for('login'))
+
+    # If DB doesn't have is_admin column, treat as non-admin (0)
+    is_admin = user['is_admin'] if 'is_admin' in user.keys() else 0
+    if int(is_admin) != 1:
+        flash("Administrator access required.", "error")
+        # If there's a logged-in user, send them to their dashboard
+        if 'user_id' in session:
+            return redirect(url_for('dashboard', user_id=session.get('user_id')))
+        return redirect(url_for('login'))
+
+    return None
+
+
+# home / login page
 @app.route('/')
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
         username = request.form['username']
-        email = request.form['email']
+        password = request.form['password']
 
         conn = get_db_connection()
         user = conn.execute(
-            'SELECT * FROM users WHERE username = ? AND email = ?',
-            (username, email)
+            'SELECT * FROM users WHERE username = ?',
+            (username,)
         ).fetchone()
         conn.close()
 
-        if user:
+        # ensure user exists and verify password hash
+        if user and verify_password(password, user['password_hash']):
+            session['user_id'] = user['user_id']  # store session login
+
+            # store admin flag in session if column exists
+            is_admin = user['is_admin'] if 'is_admin' in user.keys() else 0
+            session['is_admin'] = int(is_admin)
+
             flash(f"Welcome back, {user['username']}!", "success")
             return redirect(url_for('dashboard', user_id=user['user_id']))
         else:
-            flash("Invalid credentials or user not found.", "error")
+            flash("Invalid username or password.", "error")
             return redirect(url_for('login'))
 
     return render_template('login.html')
+
 
 
 # register new user
@@ -43,12 +95,15 @@ def login():
 def register():
     username = request.form['username']
     email = request.form['email']
+    password = request.form['password']
+
+    password_hash = hash_password(password)
 
     conn = get_db_connection()
     try:
         conn.execute(
-            'INSERT INTO users (username, email, balance) VALUES (?, ?, ?)',
-            (username, email, 0.0)
+            'INSERT INTO users (username, email, password_hash, balance) VALUES (?, ?, ?, ?)',
+            (username, email, password_hash, 0.0)
         )
         conn.commit()
         flash("Account created successfully! Please log in.", "success")
@@ -58,11 +113,12 @@ def register():
         conn.close()
 
     return redirect(url_for('login'))
-    
+
+
 # logout function
 @app.route('/logout', methods=['POST'])
 def logout():
-    # to be implemented later, since the app doesn't use sessions yet; I just wanted to put in the UI element now
+    session.clear()  # clear entire session including is_admin
     flash("You have been logged out.", "success")
     return redirect(url_for('login'))
 
@@ -70,6 +126,11 @@ def logout():
 # user dashboard
 @app.route('/dashboard/<int:user_id>')
 def dashboard(user_id):
+    # Require login
+    if 'user_id' not in session or session['user_id'] != user_id:
+        flash("You must be logged in to view that page.", "error")
+        return redirect(url_for('login'))
+
     conn = get_db_connection()
     user = conn.execute('SELECT * FROM users WHERE user_id = ?', (user_id,)).fetchone()
 
@@ -119,6 +180,10 @@ def dashboard(user_id):
 # deposit function
 @app.route('/deposit/<int:user_id>', methods=['POST'])
 def deposit(user_id):
+    if 'user_id' not in session or session['user_id'] != user_id:
+        flash("Unauthorized.", "error")
+        return redirect(url_for('login'))
+
     amount = float(request.form['amount'])
     if amount <= 0:
         flash("Deposit amount must be greater than zero.", "error")
@@ -139,6 +204,10 @@ def deposit(user_id):
 # withdraw function
 @app.route('/withdraw/<int:user_id>', methods=['POST'])
 def withdraw(user_id):
+    if 'user_id' not in session or session['user_id'] != user_id:
+        flash("Unauthorized.", "error")
+        return redirect(url_for('login'))
+
     amount = float(request.form['amount'])
     if amount <= 0:
         flash("Withdrawal amount must be greater than zero.", "error")
@@ -166,10 +235,15 @@ def withdraw(user_id):
 
     flash(f"Successfully withdrew ${amount:.2f}.", "success")
     return redirect(url_for('dashboard', user_id=user_id))
-    
+
+
 # unified deposit/withdraw (so they can share an input field)
 @app.route('/depositwithdraw/<int:user_id>', methods=['POST'])
 def depositwithdraw(user_id):
+    if 'user_id' not in session or session['user_id'] != user_id:
+        flash("Unauthorized.", "error")
+        return redirect(url_for('login'))
+
     amount = float(request.form['amount'])
     action = request.form['action']
 
@@ -206,6 +280,10 @@ def depositwithdraw(user_id):
 # buy stock function
 @app.route('/buy_stock/<int:user_id>', methods=['POST'])
 def buy_stock(user_id):
+    if 'user_id' not in session or session['user_id'] != user_id:
+        flash("Unauthorized.", "error")
+        return redirect(url_for('login'))
+
     stock_id = int(request.form['stock_id'])
     quantity = int(request.form['quantity'])
     
@@ -287,6 +365,10 @@ def buy_stock(user_id):
 # sell stock function
 @app.route('/sell_stock/<int:user_id>', methods=['POST'])
 def sell_stock(user_id):
+    if 'user_id' not in session or session['user_id'] != user_id:
+        flash("Unauthorized.", "error")
+        return redirect(url_for('login'))
+
     stock_id = int(request.form['stock_id'])
     quantity = int(request.form['quantity'])
     
@@ -363,11 +445,16 @@ def sell_stock(user_id):
         conn.close()
     
     return redirect(url_for('dashboard', user_id=user_id))
-    
- # admin panel 
+
+
+# ----- admin routes (now protected) -----
+
 @app.route('/admin')
 def admin():
-    """Displays a list of users and their balances for management."""
+    check = require_admin()
+    if check:
+        return check
+
     conn = get_db_connection()
     users = conn.execute('SELECT user_id, username, email, balance FROM users').fetchall()
     conn.close()
@@ -375,10 +462,12 @@ def admin():
     return render_template('admin.html', users=users)
 
 
-# Admin Routes for User Management
 @app.route('/admin/users')
 def admin_users():
-    """View all users with management options."""
+    check = require_admin()
+    if check:
+        return check
+
     conn = get_db_connection()
     users = conn.execute('SELECT user_id, username, email, balance FROM users').fetchall()
     conn.close()
@@ -387,7 +476,10 @@ def admin_users():
 
 @app.route('/admin/user/create', methods=['GET', 'POST'])
 def admin_user_create():
-    """Create a new user account."""
+    check = require_admin()
+    if check:
+        return check
+
     if request.method == 'POST':
         username = request.form['username']
         email = request.form['email']
@@ -410,10 +502,12 @@ def admin_user_create():
     return render_template('admin_user_create.html')
 
 
-# Admin Routes for Stock Management
 @app.route('/admin/stocks')
 def admin_stocks():
-    """View all stocks in the system."""
+    check = require_admin()
+    if check:
+        return check
+
     conn = get_db_connection()
     stocks = conn.execute('SELECT * FROM stocks').fetchall()
     conn.close()
@@ -422,7 +516,10 @@ def admin_stocks():
 
 @app.route('/admin/stock/create', methods=['GET', 'POST'])
 def admin_stock_create():
-    """Create a new stock."""
+    check = require_admin()
+    if check:
+        return check
+
     if request.method == 'POST':
         symbol = request.form['symbol'].upper()
         company_name = request.form['company_name']
@@ -447,7 +544,10 @@ def admin_stock_create():
 
 @app.route('/admin/stock/update', methods=['GET', 'POST'])
 def admin_stock_update():
-    """Update stock prices."""
+    check = require_admin()
+    if check:
+        return check
+
     conn = get_db_connection()
     stocks = conn.execute('SELECT * FROM stocks').fetchall()
     
@@ -467,64 +567,105 @@ def admin_stock_update():
     return render_template('admin_stock_update.html', stocks=stocks)
 
 
-# Admin Routes for Market Management
 @app.route('/admin/market/hours')
 def admin_market_hours():
-    """Configure market hours."""
+    check = require_admin()
+    if check:
+        return check
+
     return render_template('admin_market_hours.html')
 
 
 @app.route('/admin/market/schedule')
 def admin_market_schedule():
-    """Set market schedule."""
+    check = require_admin()
+    if check:
+        return check
+
     return render_template('admin_market_schedule.html')
-
-
-@app.route('/admin/market/status')
-def admin_market_status():
-    """Open/close markets."""
-    return render_template('admin_market_status.html')
-
-
-# Admin Routes for System Management
-@app.route('/admin/logs')
+    
+@app.route('/admin/market/logs')
 def admin_logs():
-    """View system logs."""
+    check = require_admin()
+    if check:
+        return check
+
     return render_template('admin_logs.html')
-
-
-@app.route('/admin/notifications')
-def admin_notifications():
-    """Manage system notifications."""
-    return render_template('admin_notifications.html')
-
 
 @app.route('/admin/settings')
 def admin_settings():
-    """Configure system settings."""
+    check = require_admin()
+    if check:
+        return check
+
     return render_template('admin_settings.html')
 
+def get_market_schedule():
+    conn = get_db_connection()
+    schedule = conn.execute(
+        "SELECT * FROM market_schedule ORDER BY id DESC LIMIT 1"
+    ).fetchone()
+    conn.close()
+    return schedule
 
-# Admin Routes for Analytics & Reports
-@app.route('/admin/analytics')
-def admin_analytics():
-    """View trading analytics."""
-    return render_template('admin_analytics.html')
+def get_market_status():
+    schedule = get_market_schedule()
+    if not schedule:
+        return "closed"
 
+    # manual override first
+    if schedule["manual_override"]:
+        return schedule["manual_status"]
 
-@app.route('/admin/reports')
-def admin_reports():
-    """Generate system reports."""
-    return render_template('admin_reports.html')
+    now = datetime.now().strftime("%H:%M")
 
+    if schedule["is_open_today"] and schedule["market_open_time"] <= now <= schedule["market_close_time"]:
+        return "open"
+    return "closed"
 
-@app.route('/admin/export')
-def admin_export():
-    """Export system data."""
-    return render_template('admin_export.html')
+# API - public market status
+@app.route('/api/market/status')
+def api_market_status():
+    return {"status": get_market_status()}
 
+# API - admin get schedule
+@app.route('/api/admin/market/schedule')
+def api_market_get_schedule():
+    check = require_admin()
+    if check:
+        return check
+
+    schedule = get_market_schedule()
+    return dict(schedule) if schedule else {}
+
+# API - admin update schedule
+@app.route('/api/admin/market/schedule', methods=['POST'])
+def api_market_update_schedule():
+    check = require_admin()
+    if check:
+        return check
+
+    data = request.json
+
+    conn = get_db_connection()
+    conn.execute("""
+        INSERT INTO market_schedule
+        (market_open_time, market_close_time, is_open_today, manual_override, manual_status, updated_by, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+    """, (
+        data.get('market_open_time'),
+        data.get('market_close_time'),
+        int(data.get('is_open_today', 1)),
+        int(data.get('manual_override', 0)),
+        data.get('manual_status', "closed"),
+        session['user_id']
+    ))
+    conn.commit()
+    conn.close()
+
+    return {"success": True, "message": "Market schedule updated"}
 
 
 # run the flask app
 if __name__ == '__main__':
-    app.run(debug=True, port=5001)
+    app.run(debug=True, port=5000)

@@ -1,66 +1,10 @@
-<!-- <!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>EquiSense - Login</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
-</head>
-<body>
-  <header>
-    <h1>EquiSense</h1>
-    <nav>
-      <ul>
-      </ul>
-    </nav>
-  </header>
-
-  <main>
-    <section class="panel">
-      <h2>Login</h2>
-      <form action="{{ url_for('login') }}" method="POST">
-        <label for="username">Username</label>
-        <input type="text" id="username" name="username" placeholder="Enter username" required>
-
-        <label for="email">Email</label>
-        <input type="email" id="email" name="email" placeholder="Enter email" required>
-
-        <div class="buttons">
-          <button type="submit">Login</button>
-        </div>
-      </form>
-    </section>
-
-    <section class="panel">
-      <h2>Register</h2>
-      <form action="{{ url_for('register') }}" method="POST">
-        <label for="reg_username">Username</label>
-        <input type="text" id="reg_username" name="username" placeholder="Choose a username" required>
-
-        <label for="reg_email">Email</label>
-        <input type="email" id="reg_email" name="email" placeholder="Enter your email" required>
-
-        <div class="buttons">
-          <button type="submit">Register</button>
-        </div>
-      </form>
-    </section>
-  </main>
-
-  <footer>
-    <p>&copy; 2025 EquiSense</p>
-  </footer>
-</body>
-</html> -->
-
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>EquiSense - Login</title>
-
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
   <style>
     :root{
       --ink:#1e2a38;
@@ -80,18 +24,8 @@
     html,body{height:100%}
     body{font-family:Inter,system-ui,Segoe UI,Arial,sans-serif;background:var(--bg);color:var(--text);}
 
-    /* Header */
-    header{
-      background: linear-gradient(135deg, var(--ink), var(--ink-3));
-      color:#fff; padding:28px 16px; text-align:center;
-      box-shadow: var(--shadow-sm);
-    }
-    header h1{letter-spacing:.3px; font-size:1.6rem; font-weight:800}
-
-    /* Page container */
     main{padding:32px 16px; max-width:980px; margin:0 auto;}
 
-    /* Flash */
     .flash-wrap{max-width:980px;margin:16px auto 0}
     .flash{
       border-radius:10px; padding:12px 14px; margin:10px 0;
@@ -100,7 +34,6 @@
     .flash.success{background:#e8f5ee;color:#145c2e;border-color:#cbead8}
     .flash.error{background:#fdecec;color:#7a1c1c;border-color:#f8c6c6}
 
-    /* Auth grid */
     .auth-grid{
       display:grid; grid-template-columns: 1fr 1fr; gap:20px; align-items:start;
     }
@@ -108,7 +41,6 @@
       .auth-grid{grid-template-columns:1fr}
     }
 
-    /* Card */
     .card{
       background:var(--card);
       border-radius:var(--radius);
@@ -125,12 +57,11 @@
     .card-header h2{font-size:1.1rem; font-weight:800; letter-spacing:.25px}
     .card-body{padding:18px}
 
-    /* Form */
     form{display:flex; flex-direction:column; gap:12px}
     label{
       font-size:.9rem; font-weight:700; color:#4b5563; letter-spacing:.2px;
     }
-    input[type="text"], input[type="email"]{
+    input[type="text"], input[type="email"], input[type="password"]{
       padding:12px 14px; border:1px solid #e5e7eb; border-radius:10px;
       background:#fff; outline:none; transition:border-color .2s ease, box-shadow .2s ease;
       font-size:.98rem;
@@ -141,7 +72,6 @@
       box-shadow: var(--focus);
     }
 
-    /* Buttons row */
     .actions{display:flex; gap:10px; margin-top:6px}
     button{
       appearance:none; border:none; cursor:pointer;
@@ -158,8 +88,6 @@
     }
     .btn-ghost:hover{background:#f6f8fa}
 
-    /* Footer */
-    footer{color:#8b95a1;text-align:center;margin:28px 0 18px;font-size:.9rem}
   </style>
 </head>
 <body>
@@ -167,7 +95,6 @@
     <h1>EquiSense</h1>
   </header>
 
-  <!-- Flash messages (optional) -->
   {% with messages = get_flashed_messages(with_categories=true) %}
     {% if messages %}
       <div class="flash-wrap">
@@ -180,6 +107,7 @@
 
   <main>
     <div class="auth-grid">
+
       <!-- LOGIN -->
       <section class="card">
         <div class="card-header">
@@ -187,20 +115,22 @@
         </div>
         <div class="card-body">
           <form action="{{ url_for('login') }}" method="POST" novalidate>
+
             <div>
               <label for="username">Username</label>
               <input type="text" id="username" name="username" placeholder="Your username" autocomplete="username" required>
             </div>
 
             <div>
-              <label for="email">Email</label>
-              <input type="email" id="email" name="email" placeholder="you@example.com" autocomplete="email" required>
+              <label for="password">Password</label>
+              <!-- ADDED: password field -->
+              <input type="password" id="password" name="password" placeholder="Your password" autocomplete="current-password" required>
             </div>
 
             <div class="actions">
               <button type="submit">Login</button>
-              <!-- <a class="btn-ghost" style="display:inline-flex;align-items:center;gap:8px;padding:12px 16px;border-radius:10px;text-decoration:none" href="{{ url_for('admin') }}">Admin</a> -->
             </div>
+
           </form>
         </div>
       </section>
@@ -212,6 +142,7 @@
         </div>
         <div class="card-body">
           <form action="{{ url_for('register') }}" method="POST" novalidate>
+
             <div>
               <label for="reg_username">Username</label>
               <input type="text" id="reg_username" name="username" placeholder="Choose a username" required>
@@ -222,13 +153,20 @@
               <input type="email" id="reg_email" name="email" placeholder="you@example.com" required>
             </div>
 
+            <div>
+              <label for="reg_password">Password</label>
+              <!-- ADDED: password field -->
+              <input type="password" id="reg_password" name="password" placeholder="Create a password" autocomplete="new-password" required>
+            </div>
+
             <div class="actions">
               <button type="submit">Register</button>
-              <!-- <a class="btn-ghost" style="display:inline-flex;align-items:center;gap:8px;padding:12px 16px;border-radius:10px;text-decoration:none" href="{{ url_for('login') }}">Back to Login</a> -->
             </div>
+
           </form>
         </div>
       </section>
+
     </div>
   </main>
 

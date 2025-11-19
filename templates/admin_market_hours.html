@@ -5,24 +5,45 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>EquiSense - Market Hours</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+  <style>
+    .flash-message {
+      padding: 10px;
+      border-radius: 6px;
+      margin-bottom: 12px;
+      font-weight: bold;
+    }
+    .flash-success {
+      background: #e8f5e9;
+      color: #256029;
+    }
+    .flash-error {
+      background: #ffebee;
+      color: #b71c1c;
+    }
+  </style>
 </head>
+
 <body>
   <main>
     <section class="panel">
       <h2>Market Hours Configuration</h2>
       <p>Configure trading hours for the stock market.</p>
-      
-      <form>
+
+      <!-- Status display -->
+      <div id="flash" style="display:none;"></div>
+
+      <form id="marketHoursForm">
+        
         <div>
           <label for="market-open">Market Open Time:</label>
-          <input type="time" id="market-open" name="market-open" value="09:30">
+          <input type="time" id="market-open" name="market_open_time" required>
         </div>
-        
+
         <div>
           <label for="market-close">Market Close Time:</label>
-          <input type="time" id="market-close" name="market-close" value="16:00">
+          <input type="time" id="market-close" name="market_close_time" required>
         </div>
-        
+
         <div>
           <label for="timezone">Timezone:</label>
           <select id="timezone" name="timezone">
@@ -39,5 +60,69 @@
       </form>
     </section>
   </main>
+
+  <script>
+    const flashBox = document.getElementById("flash");
+
+    function showFlash(msg, ok=true) {
+      flashBox.style.display = "block";
+      flashBox.textContent = msg;
+      flashBox.className = ok ? "flash-message flash-success" : "flash-message flash-error";
+      setTimeout(() => { flashBox.style.display = "none"; }, 3000);
+    }
+
+    async function loadCurrentSchedule() {
+      try {
+        const res = await fetch("/api/admin/market/schedule");
+        if (!res.ok) throw new Error("Failed to load schedule.");
+
+        const data = await res.json();
+        if (data && data.market_open_time) {
+          document.getElementById("market-open").value = data.market_open_time;
+        }
+        if (data && data.market_close_time) {
+          document.getElementById("market-close").value = data.market_close_time;
+        }
+      } catch (err) {
+        showFlash(err.message, false);
+      }
+    }
+
+    document.getElementById("marketHoursForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+
+      const market_open_time = document.getElementById("market-open").value;
+      const market_close_time = document.getElementById("market-close").value;
+
+      const payload = {
+        market_open_time,
+        market_close_time,
+        is_open_today: 1,
+        manual_override: 0,
+        manual_status: "closed",
+        updated_by: "admin" 
+      };
+
+      try {
+        const res = await fetch("/api/admin/market/schedule", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+
+        const data = await res.json();
+        if (data.success) {
+          showFlash("Market hours updated successfully!");
+        } else {
+          showFlash("Failed to update market hours.", false);
+        }
+      } catch (err) {
+        showFlash(err.message, false);
+      }
+    });
+
+    // Load existing schedule on page load
+    loadCurrentSchedule();
+  </script>
 </body>
 </html>
