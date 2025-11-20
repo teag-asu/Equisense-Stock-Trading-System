@@ -83,14 +83,14 @@ CREATE TABLE IF NOT EXISTS transaction_history (
 # Create market schedule table
 cursor.execute('''
 CREATE TABLE IF NOT EXISTS market_schedule (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    market_open_time TEXT,
-    market_close_time TEXT,
-    is_open_today INTEGER,
-    manual_override INTEGER,
-    manual_status TEXT,
-    updated_by INTEGER,
-    updated_at TEXT
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    open_time TEXT DEFAULT '09:30',
+    close_time TEXT DEFAULT '16:00',
+    timezone TEXT DEFAULT 'EST',
+    trading_days TEXT DEFAULT 'monday,tuesday,wednesday,thursday,friday',
+    holidays TEXT DEFAULT '',
+    manual_override INTEGER DEFAULT 0,
+    manual_message TEXT DEFAULT ''
 );
 ''')
 

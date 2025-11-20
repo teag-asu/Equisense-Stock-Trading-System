@@ -5,124 +5,52 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>EquiSense - Market Hours</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
-  <style>
-    .flash-message {
-      padding: 10px;
-      border-radius: 6px;
-      margin-bottom: 12px;
-      font-weight: bold;
-    }
-    .flash-success {
-      background: #e8f5e9;
-      color: #256029;
-    }
-    .flash-error {
-      background: #ffebee;
-      color: #b71c1c;
-    }
-  </style>
 </head>
 
 <body>
-  <main>
-    <section class="panel">
-      <h2>Market Hours Configuration</h2>
-      <p>Configure trading hours for the stock market.</p>
+<main>
+  <section class="panel">
+    <h2>Market Hours Configuration</h2>
+    <p>Configure the daily opening and closing times of the market.</p>
 
-      <!-- Status display -->
-      <div id="flash" style="display:none;"></div>
-
-      <form id="marketHoursForm">
-        
-        <div>
-          <label for="market-open">Market Open Time:</label>
-          <input type="time" id="market-open" name="market_open_time" required>
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        <div class="flash-messages">
+        {% for category, message in messages %}
+          <div class="flash {{ category }}">{{ message }}</div>
+        {% endfor %}
         </div>
+      {% endif %}
+    {% endwith %}
 
-        <div>
-          <label for="market-close">Market Close Time:</label>
-          <input type="time" id="market-close" name="market_close_time" required>
-        </div>
+    <form method="post">
 
-        <div>
-          <label for="timezone">Timezone:</label>
-          <select id="timezone" name="timezone">
-            <option value="EST">Eastern Standard Time (EST)</option>
-            <option value="PST">Pacific Standard Time (PST)</option>
-            <option value="CST">Central Standard Time (CST)</option>
-            <option value="MST">Mountain Standard Time (MST)</option>
-          </select>
-        </div>
-        
-        <div class="buttons">
-          <button type="submit">Save Market Hours</button>
-        </div>
-      </form>
-    </section>
-  </main>
+      <div>
+        <label for="open_time">Market Open Time:</label>
+        <input type="time" id="open_time" name="open_time"
+               value="{{ settings.open_time }}" required>
+      </div>
 
-  <script>
-    const flashBox = document.getElementById("flash");
+      <div>
+        <label for="close_time">Market Close Time:</label>
+        <input type="time" id="close_time" name="close_time"
+               value="{{ settings.close_time }}" required>
+      </div>
 
-    function showFlash(msg, ok=true) {
-      flashBox.style.display = "block";
-      flashBox.textContent = msg;
-      flashBox.className = ok ? "flash-message flash-success" : "flash-message flash-error";
-      setTimeout(() => { flashBox.style.display = "none"; }, 3000);
-    }
+      <div>
+        <label for="timezone">Timezone:</label>
+        <select id="timezone" name="timezone">
+          <option value="EST" {% if settings.timezone == 'EST' %}selected{% endif %}>EST</option>
+          <option value="PST" {% if settings.timezone == 'PST' %}selected{% endif %}>PST</option>
+          <option value="CST" {% if settings.timezone == 'CST' %}selected{% endif %}>CST</option>
+          <option value="MST" {% if settings.timezone == 'MST' %}selected{% endif %}>MST</option>
+        </select>
+      </div>
 
-    async function loadCurrentSchedule() {
-      try {
-        const res = await fetch("/api/admin/market/schedule");
-        if (!res.ok) throw new Error("Failed to load schedule.");
+      <button type="submit">Save Market Hours</button>
+    </form>
 
-        const data = await res.json();
-        if (data && data.market_open_time) {
-          document.getElementById("market-open").value = data.market_open_time;
-        }
-        if (data && data.market_close_time) {
-          document.getElementById("market-close").value = data.market_close_time;
-        }
-      } catch (err) {
-        showFlash(err.message, false);
-      }
-    }
-
-    document.getElementById("marketHoursForm").addEventListener("submit", async (e) => {
-      e.preventDefault();
-
-      const market_open_time = document.getElementById("market-open").value;
-      const market_close_time = document.getElementById("market-close").value;
-
-      const payload = {
-        market_open_time,
-        market_close_time,
-        is_open_today: 1,
-        manual_override: 0,
-        manual_status: "closed",
-        updated_by: "admin" 
-      };
-
-      try {
-        const res = await fetch("/api/admin/market/schedule", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload)
-        });
-
-        const data = await res.json();
-        if (data.success) {
-          showFlash("Market hours updated successfully!");
-        } else {
-          showFlash("Failed to update market hours.", false);
-        }
-      } catch (err) {
-        showFlash(err.message, false);
-      }
-    });
-
-    // Load existing schedule on page load
-    loadCurrentSchedule();
-  </script>
+  </section>
+</main>
 </body>
 </html>

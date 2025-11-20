@@ -361,3 +361,9 @@ dialog.modal{
   border-radius: 6px;             /* optional: soften iframe edges */
   background: #fff;
 }
+
+/* trading button disabled when market is closed */
+.disabled-btn {
+  opacity: 0.5;
+  pointer-events: none;
+}

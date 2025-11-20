@@ -1,7 +1,9 @@
 import os
-from flask import Flask, render_template, request, redirect, url_for, flash, session
+from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify
+from datetime import datetime, timedelta
 import sqlite3
 import bcrypt
+import json
 
 app = Flask(__name__)
 
@@ -283,6 +285,15 @@ def buy_stock(user_id):
     if 'user_id' not in session or session['user_id'] != user_id:
         flash("Unauthorized.", "error")
         return redirect(url_for('login'))
+    # check market status server-side and block trades if closed
+    ms = get_market_status()
+    if ms.get("status") != "open":
+        # provide the reason and next-open in the flash message
+        next_open = ms.get("next_open")
+        next_text = f" Next open: {next_open}." if next_open else ""
+        flash(f"Market is closed: {ms.get('reason')}.{next_text}", "error")
+        return redirect(url_for('dashboard', user_id=user_id))
+
 
     stock_id = int(request.form['stock_id'])
     quantity = int(request.form['quantity'])
@@ -368,7 +379,15 @@ def sell_stock(user_id):
     if 'user_id' not in session or session['user_id'] != user_id:
         flash("Unauthorized.", "error")
         return redirect(url_for('login'))
-
+    # check market status server-side and block trades if closed
+    ms = get_market_status()
+    if ms.get("status") != "open":
+        # provide the reason and next-open in the flash message
+        next_open = ms.get("next_open")
+        next_text = f" Next open: {next_open}." if next_open else ""
+        flash(f"Market is closed: {ms.get('reason')}.{next_text}", "error")
+        return redirect(url_for('dashboard', user_id=user_id))
+        
     stock_id = int(request.form['stock_id'])
     quantity = int(request.form['quantity'])
     
@@ -567,22 +586,86 @@ def admin_stock_update():
     return render_template('admin_stock_update.html', stocks=stocks)
 
 
-@app.route('/admin/market/hours')
+@app.route('/admin/market/hours', methods=['GET', 'POST'])
 def admin_market_hours():
     check = require_admin()
-    if check:
+    if check: 
         return check
 
-    return render_template('admin_market_hours.html')
+    if request.method == 'POST':
+        conn = get_db_connection()
+        conn.execute("""
+            UPDATE market_schedule
+            SET open_time = ?, close_time = ?, timezone = ?
+            WHERE id = 1
+        """, (
+            request.form['open_time'],
+            request.form['close_time'],
+            request.form['timezone'],
+        ))
+        conn.commit()
+        conn.close()
+
+        flash("Market hours updated.", "success")
+        return redirect(url_for('admin_market_hours'))
+
+    settings = get_market_schedule()
+    return render_template('admin_market_hours.html', settings=settings)
 
 
-@app.route('/admin/market/schedule')
+@app.route("/admin/market/schedule", methods=["GET", "POST"])
 def admin_market_schedule():
-    check = require_admin()
-    if check:
-        return check
+    conn = get_db_connection()
 
-    return render_template('admin_market_schedule.html')
+    # Retrieve the existing schedule (may be None)
+    settings = get_market_schedule()
+
+    # If no schedule exists, initialize one
+    if settings is None:
+        conn.execute("""
+            INSERT INTO market_schedule
+            (open_time, close_time, timezone, trading_days, holidays, manual_override, manual_message)
+            VALUES ('09:30', '16:00', 'EST', 'monday,tuesday,wednesday,thursday,friday', '', 0, '')
+        """)
+        conn.commit()
+        settings = get_market_schedule()     # reload defaults
+
+    # --- POST: Save form ---
+    if request.method == "POST":
+        # Determine selected trading days
+        all_days = ["monday","tuesday","wednesday","thursday","friday","saturday","sunday"]
+        selected_days = [
+            d for d in all_days
+            if request.form.get(f"day_{d}") == d
+        ]
+
+        holidays = request.form.get("holidays", "").strip()
+
+        conn.execute("""
+            UPDATE market_schedule
+            SET trading_days = ?, holidays = ?
+        """, (",".join(selected_days), holidays))
+
+        conn.commit()
+        conn.close()
+
+        flash("Market schedule updated!", "success")
+        return redirect(url_for("admin_market_schedule"))
+
+    conn.close()
+
+    # --- GET: Prepare template data ---
+    active_days = settings["trading_days"].split(",") if settings["trading_days"] else []
+    all_days = ["monday","tuesday","wednesday","thursday","friday","saturday","sunday"]
+
+    return render_template(
+        "admin_market_schedule.html",
+        settings=settings,
+        active_days=active_days,
+        days=all_days
+    )
+
+
     
 @app.route('/admin/market/logs')
 def admin_logs():
@@ -608,62 +691,143 @@ def get_market_schedule():
     conn.close()
     return schedule
 
+def compute_next_open(schedule, from_dt=None):
+    """
+    Look forward up to 30 days for the next datetime when the market will open.
+    Returns timestamp string or None.
+    """
+    if not schedule:
+        return None
+
+    if from_dt is None:
+        from_dt = datetime.now()
+
+    open_time = schedule["open_time"]
+    trading_days = (schedule["trading_days"] or "").split(",")
+    holidays_raw = schedule["holidays"] or ""
+
+    # Normalize holiday list
+    holidays = [h.strip() for h in holidays_raw.split("\n") if h.strip()]
+
+    def is_holiday(date_obj):
+        mmdd = date_obj.strftime("%m-%d")
+        iso = date_obj.strftime("%Y-%m-%d")
+        for h in holidays:
+            prefix = h.split("-", 1)[0].strip()
+            if prefix == mmdd or prefix == iso:
+                return True
+        return False
+
+    # Parse open time
+    try:
+        open_h, open_m = [int(x) for x in open_time.split(":")]
+    except:
+        open_h, open_m = 9, 30  # fallback
+
+    for i in range(0, 31):
+        day = from_dt + timedelta(days=i)
+        weekday_name = day.strftime("%A").lower()
+
+        # Check day-of-week
+        if weekday_name not in trading_days:
+            continue
+
+        # Holiday check
+        if is_holiday(day):
+            continue
+
+        # Candidate open time
+        open_dt = day.replace(hour=open_h, minute=open_m, second=0, microsecond=0)
+
+        if open_dt > from_dt:
+            return open_dt.strftime("%Y-%m-%d %H:%M:%S")
+
+    return None
+
 def get_market_status():
+    """
+    Returns:
+    {
+        "status": "open" | "closed",
+        "reason": "...",
+        "next_open": "YYYY-MM-DD HH:MM:SS" or None
+    }
+    """
     schedule = get_market_schedule()
     if not schedule:
-        return "closed"
+        return {"status": "closed", "reason": "No schedule configured", "next_open": None}
 
-    # manual override first
+    # Manual override
     if schedule["manual_override"]:
-        return schedule["manual_status"]
+        msg = schedule["manual_message"] or "Market manually closed"
+        next_open = compute_next_open(schedule)
+        return {
+            "status": "closed",
+            "reason": f"Manual override: {msg}",
+            "next_open": next_open
+        }
 
-    now = datetime.now().strftime("%H:%M")
+    now = datetime.now()
+    weekday = now.strftime("%A").lower()
+    now_time_str = now.strftime("%H:%M")
 
-    if schedule["is_open_today"] and schedule["market_open_time"] <= now <= schedule["market_close_time"]:
-        return "open"
-    return "closed"
+    # Parse schedule fields
+    trading_days = (schedule["trading_days"] or "").split(",")
+    holidays_raw = schedule["holidays"] or ""
+    holidays = [h.strip() for h in holidays_raw.split("\n") if h.strip()]
 
-# API - public market status
-@app.route('/api/market/status')
+    # Check if today is a holiday
+    mmdd = now.strftime("%m-%d")
+    for h in holidays:
+        date_part = h.split(" - ")[0].strip()  # Extract "MM-DD" from "MM-DD - description"
+    if date_part == mmdd:
+        next_open = compute_next_open(schedule)
+        return {
+            "status": "closed",
+            "reason": f"Market closed for holiday: {h}",
+            "next_open": next_open
+        }
+
+
+    # Check if today is a trading day
+    if weekday not in trading_days:
+        next_open = compute_next_open(schedule)
+        return {
+            "status": "closed",
+            "reason": f"Market closed today ({weekday.title()})",
+            "next_open": next_open
+        }
+
+    # Time window
+    open_time = schedule["open_time"]
+    close_time = schedule["close_time"]
+
+    if not (open_time <= now_time_str <= close_time):
+        next_open = None
+        try:
+            # If we haven't yet reached open_time today
+            if now_time_str < open_time:
+                h, m = [int(x) for x in open_time.split(":")]
+                next_open_dt = now.replace(hour=h, minute=m, second=0, microsecond=0)
+                next_open = next_open_dt.strftime("%Y-%m-%d %H:%M:%S")
+            else:
+                next_open = compute_next_open(schedule)
+        except:
+            next_open = compute_next_open(schedule)
+
+        return {
+            "status": "closed",
+            "reason": f"Market closed at this time (open {open_time}–{close_time})",
+            "next_open": next_open
+        }
+
+    # Otherwise it's open
+    return {"status": "open", "reason": "Market is open", "next_open": None}
+
+@app.route("/api/market/status")
 def api_market_status():
-    return {"status": get_market_status()}
-
-# API - admin get schedule
-@app.route('/api/admin/market/schedule')
-def api_market_get_schedule():
-    check = require_admin()
-    if check:
-        return check
-
-    schedule = get_market_schedule()
-    return dict(schedule) if schedule else {}
-
-# API - admin update schedule
-@app.route('/api/admin/market/schedule', methods=['POST'])
-def api_market_update_schedule():
-    check = require_admin()
-    if check:
-        return check
-
-    data = request.json
-
-    conn = get_db_connection()
-    conn.execute("""
-        INSERT INTO market_schedule
-        (market_open_time, market_close_time, is_open_today, manual_override, manual_status, updated_by, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-    """, (
-        data.get('market_open_time'),
-        data.get('market_close_time'),
-        int(data.get('is_open_today', 1)),
-        int(data.get('manual_override', 0)),
-        data.get('manual_status', "closed"),
-        session['user_id']
-    ))
-    conn.commit()
-    conn.close()
-
-    return {"success": True, "message": "Market schedule updated"}
+    status = get_market_status()
+    return jsonify(status)
 
 
 # run the flask app
