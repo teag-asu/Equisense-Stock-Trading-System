@@ -5,42 +5,69 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>EquiSense - System Logs</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+  <style>
+    .log-entry { padding: 0.5em 0; border-bottom: 1px solid #ddd; font-family: monospace; }
+    .pagination { margin-top: 1em; }
+    .pagination a { margin: 0 0.25em; text-decoration: none; }
+    .pagination a.active { font-weight: bold; }
+  </style>
 </head>
 <body>
   <main>
     <section class="panel">
       <h2>System Logs & Notifications</h2>
       <p>View system logs and manage notifications.</p>
-      
-      <div>
-        <h3>Recent System Logs (Placeholders)</h3>
-        <div style="background: #f5f5f5; padding: 1em; border-radius: 4px; font-family: monospace; max-height: 300px; overflow-y: auto;">
-          <div>[2025-01-15 10:30:15] INFO: User 'teag2' logged in successfully</div>
-          <div>[2025-01-15 10:25:42] INFO: Stock 'AAPL' price updated to $150.25</div>
-          <div>[2025-01-15 10:20:18] INFO: User 'memes' deposited $1000.00</div>
-          <div>[2025-01-15 10:15:33] INFO: New stock 'GOOGL' added to system</div>
-          <div>[2025-01-15 10:10:07] WARNING: Database connection timeout</div>
-          <div>[2025-01-15 10:05:22] INFO: System backup completed successfully</div>
-          <div>[2025-01-15 10:00:01] INFO: Market opened for trading</div>
-        </div>
+
+      <form method="get" style="margin-bottom: 1em;">
+        <label>
+          Event Type:
+          <select name="event_type" onchange="this.form.submit()">
+            <option value="all" {% if selected_type=='all' %}selected{% endif %}>All</option>
+            {% for id, label in event_types.items() %}
+              <option value="{{ id }}" {% if selected_type|int == id %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </label>
+
+        <label style="margin-left: 1em;">
+          Logs per page:
+          <select name="per_page" onchange="this.form.submit()">
+            {% for n in [10,25,50,100] %}
+              <option value="{{ n }}" {% if per_page==n %}selected{% endif %}>{{ n }}</option>
+            {% endfor %}
+          </select>
+        </label>
+      </form>
+
+		<div style="background: #f5f5f5; padding: 1em; border-radius: 4px; max-height: 400px; overflow-y: auto;">
+		  {% for log in logs %}
+			<div class="log-entry">
+			  [{{ log['timestamp'] }}] ({{ event_types.get(log['type'], 'Unknown') }})
+			  {% if log['user_id'] %}User ID {{ log['user_id'] }}{% endif %}: {{ log['details'] }}
+			</div>
+		  {% else %}
+			<div>No logs found.</div>
+		  {% endfor %}
+		</div>
+
+
+      <div class="pagination">
+        {% if page > 1 %}
+          <a href="?page={{ page-1 }}&per_page={{ per_page }}&event_type={{ selected_type }}">Previous</a>
+        {% endif %}
+
+        {% for p in range(1, total_pages+1) %}
+          <a href="?page={{ p }}&per_page={{ per_page }}&event_type={{ selected_type }}" class="{% if p==page %}active{% endif %}">{{ p }}</a>
+        {% endfor %}
+
+        {% if page < total_pages %}
+          <a href="?page={{ page+1 }}&per_page={{ per_page }}&event_type={{ selected_type }}">Next</a>
+        {% endif %}
       </div>
-      
-      <div style="margin-top: 2em;">
-        <h3>System Notifications (Placeholders)</h3>
-        <div style="background: #fff3cd; padding: 1em; border-radius: 4px; border-left: 4px solid #ffc107;">
-          <strong>Warning:</strong> Database storage is at 85% capacity
-        </div>
-        <div style="background: #d1ecf1; padding: 1em; border-radius: 4px; border-left: 4px solid #17a2b8; margin-top: 1em;">
-          <strong>Info:</strong> System maintenance scheduled for Sunday 2:00 AM
-        </div>
-        <div style="background: #d4edda; padding: 1em; border-radius: 4px; border-left: 4px solid #28a745; margin-top: 1em;">
-          <strong>Success:</strong> All systems running normally
-        </div>
-      </div>
-      
+
       <div class="buttons" style="margin-top: 2em;">
-        <button>Clear Logs</button>
-        <button>Export Logs</button>
+        <button type="button" onclick="alert('Clear logs functionality to be implemented')">Clear Logs</button>
+        <button type="button" onclick="alert('Export logs functionality to be implemented')">Export Logs</button>
       </div>
     </section>
   </main>

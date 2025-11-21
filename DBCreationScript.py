@@ -94,6 +94,18 @@ CREATE TABLE IF NOT EXISTS market_schedule (
 );
 ''')
 
+#Creates log table
+cursor.execute('''
+CREATE TABLE IF NOT EXISTS logs (
+    log_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    timestamp TEXT DEFAULT (DATETIME('now')),
+    user_id INTEGER,
+    type INTEGER NOT NULL,
+    details TEXT,
+    FOREIGN KEY (user_id) REFERENCES users(user_id)
+);
+''')
+
 # Commit changes and close connection
 conn.commit()
 conn.close()
