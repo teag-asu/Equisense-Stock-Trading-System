@@ -65,10 +65,19 @@
         {% endif %}
       </div>
 
-      <div class="buttons" style="margin-top: 2em;">
-        <button type="button" onclick="alert('Clear logs functionality to be implemented')">Clear Logs</button>
-        <button type="button" onclick="alert('Export logs functionality to be implemented')">Export Logs</button>
-      </div>
+		<form action="{{ url_for('admin_logs_download') }}" method="get">
+			<button type="submit" class="btn btn-primary">
+				<i class="fas fa-download"></i> Download Logs
+			</button>
+		</form>
+
+			<form action="{{ url_for('admin_logs_clear') }}" method="post" onsubmit="return confirm('Are you sure you want to clear all logs?');">
+				<button type="submit" class="btn btn-danger">
+					<i class="fas fa-trash"></i> Clear Logs
+				</button>
+			</form>
+		</div>
+
     </section>
   </main>
 </body>

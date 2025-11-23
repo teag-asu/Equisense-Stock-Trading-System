@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>User Portfolio</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+
+<main class="dashboard-container">
+
+  <div class="card">
+    <div class="card-header">
+      <h2>Portfolio for {{ user.username }}</h2>
+      <p>Email: {{ user.email }}</p>
+      <p>Balance: ${{ "%.2f"|format(user.balance) }}</p>
+    </div>
+
+    <div class="card-content">
+
+      <h3>Current Holdings</h3>
+      {% if portfolio %}
+      <table>
+        <thead><tr><th>Symbol</th><th>Company</th><th>Quantity</th><th>Avg Cost</th></tr></thead>
+        <tbody>
+          {% for item in portfolio %}
+            <tr>
+              <td>{{ item.symbol }}</td>
+              <td>{{ item.company_name }}</td>
+              <td>{{ item.quantity }}</td>
+              <td>${{ "%.2f"|format(item.avg_cost) }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+        <p>No holdings.</p>
+      {% endif %}
+
+      <h3>Transaction History</h3>
+      {% if transactions %}
+      <table>
+        <thead>
+          <tr>
+            <th>Date</th><th>Symbol</th><th>Type</th><th>Qty</th><th>Price</th><th>Total</th><th>Cash After</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for t in transactions %}
+          <tr>
+            <td>{{ t.timestamp }}</td>
+            <td>{{ t.symbol }}</td>
+            <td>{{ t.order_type }}</td>
+            <td>{{ t.quantity }}</td>
+            <td>${{ "%.2f"|format(t.price) }}</td>
+            <td>${{ "%.2f"|format(t.total_value) }}</td>
+            <td>${{ "%.2f"|format(t.cash_after) }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+        <p>No transactions found.</p>
+      {% endif %}
+
+      <a href="{{ url_for('admin_users') }}" class="btn btn-primary">Back</a>
+
+    </div>
+
+  </div>
+
+</main>
+
+</body>
+</html>

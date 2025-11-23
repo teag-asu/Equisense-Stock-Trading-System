@@ -16,7 +16,12 @@
         <li><a href="{{ url_for('admin') }}">Admin Panel</a></li>
       </ul>
     </nav>
-	
+	 <div class="user-info">
+    <p>Logged in as: <strong>{{ user['username'] }}</strong></p>
+    <form action="{{ url_for('logout') }}" method="post">
+      <button type="submit">Log Out</button>
+    </form>
+  </div>
   </header>
 
   <main>

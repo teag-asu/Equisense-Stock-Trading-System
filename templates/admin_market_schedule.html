@@ -11,7 +11,7 @@
 <main>
   <section class="panel">
     <h2>Market Schedule</h2>
-    <p>Configure which days the market is open and set holiday closures.</p>
+    <p>Configure which days the market is open, set holiday closures, and optionally enable a manual override.</p>
 
     {% with messages = get_flashed_messages(with_categories=true) %}
       {% if messages %}
@@ -45,14 +45,43 @@
 
       <!-- Holidays -->
       <div>
-		  <label for="holidays">Market Holidays (one per line):</label>
-		  <textarea
-			id="holidays"
-			name="holidays"
-			rows="6"
-			placeholder="01-01 - New Year's Day&#10;07-04 - Independence Day&#10;12-25 - Christmas Day"
-		  >{{ settings.holidays or "" }}</textarea>
-	   </div>
+        <label for="holidays">Market Holidays (one per line):</label>
+        <textarea
+          id="holidays"
+          name="holidays"
+          rows="6"
+          placeholder="01-01 - New Year's Day&#10;07-04 - Independence Day&#10;12-25 - Christmas Day"
+        >{{ settings.holidays or "" }}</textarea>
+      </div>
+
+      <!-- Manual Override -->
+      <div class="manual-override-block">
+        <label>
+          <input
+            type="checkbox"
+            id="manual_override"
+            name="manual_override"
+            {% if settings.manual_override %}checked{% endif %}
+          >
+          Enable Manual Market Override
+        </label>
+
+        <div style="margin-top: 8px;">
+          <label for="manual_message">Override Message:</label>
+          <input
+            type="text"
+            id="manual_message"
+            name="manual_message"
+            placeholder="Reason for override (optional)"
+            value="{{ settings.manual_message or '' }}"
+            style="width: 100%;"
+          >
+        </div>
+
+        <p class="note">
+          When enabled, the market will ignore the automatic schedule and use this override status instead.
+        </p>
+      </div>
 
       <button type="submit">Save Market Schedule</button>
 

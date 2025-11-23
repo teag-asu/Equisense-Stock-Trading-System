@@ -101,7 +101,6 @@ def login():
 
 
 
-# register new user
 @app.route('/register', methods=['POST'])
 def register():
     username = request.form['username']
@@ -111,24 +110,30 @@ def register():
     password_hash = hash_password(password)
 
     conn = get_db_connection()
+    cursor = conn.cursor()
+
     try:
-        conn.execute(
+        cursor.execute(
             'INSERT INTO users (username, email, password_hash, balance) VALUES (?, ?, ?, ?)',
             (username, email, password_hash, 0.0)
         )
         conn.commit()
         log_event(
-             4,  # Account Registered
-             f"User account '{username}' created.",
-             user_id = cursor.lastrowid
-                )
+            4,  # Account Registered
+            f"User account '{username}' created.",
+            user_id=cursor.lastrowid
+        )
+
         flash("Account created successfully! Please log in.", "success")
+
     except sqlite3.IntegrityError:
         flash("Username or email already exists.", "error")
+
     finally:
         conn.close()
 
     return redirect(url_for('login'))
+
 
 
 # logout function
@@ -518,10 +523,26 @@ def admin():
         return check
 
     conn = get_db_connection()
-    users = conn.execute('SELECT user_id, username, email, balance FROM users').fetchall()
+
+    # fetch all users for the table
+    users = conn.execute(
+        'SELECT user_id, username, email, balance FROM users'
+    ).fetchall()
+
+    # fetch current logged-in user for the "Logged in as" display
+    current_user = conn.execute(
+        "SELECT user_id, username FROM users WHERE user_id = ?",
+        (session.get("user_id"),)
+    ).fetchone()
+
     conn.close()
 
-    return render_template('admin.html', users=users)
+    return render_template(
+        'admin.html',
+        users=users,
+        user=current_user  # <-- REQUIRED
+    )
+
 
 
 @app.route('/admin/users')
@@ -534,47 +555,193 @@ def admin_users():
     users = conn.execute('SELECT user_id, username, email, balance FROM users').fetchall()
     conn.close()
     return render_template('admin_users.html', users=users)
-
-
-@app.route('/admin/user/create', methods=['GET', 'POST'])
-def admin_user_create():
+    
+@app.route('/admin/user/<int:user_id>/edit', methods=['GET', 'POST'])
+def admin_user_edit(user_id):
     check = require_admin()
-    if check:
+    if check: 
         return check
 
-    if request.method == 'POST':
-        username = request.form['username']
-        email = request.form['email']
-        balance = float(request.form.get('balance', 0.0))
-        
-        conn = get_db_connection()
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    # Fetch the user, including admin status
+    user = cursor.execute(
+        "SELECT user_id, username, email, is_admin FROM users WHERE user_id = ?",
+        (user_id,)
+    ).fetchone()
+
+    if not user:
+        conn.close()
+        flash("User not found.", "error")
+        return redirect(url_for('admin_users'))
+
+    # Information about the currently logged-in admin
+    current_admin_id = session.get("user_id")
+
+    if request.method == "POST":
+        new_username = request.form["username"].strip()
+        new_email = request.form["email"].strip()
+        requested_is_admin = 1 if request.form.get("is_admin") == "on" else 0
+
+        old_username = user["username"]
+        old_email = user["email"]
+        old_is_admin = user["is_admin"]
+
+        changes = []
+
+        # Prevent lowering admins with equal/higher user_id
+        if requested_is_admin < old_is_admin:
+            if user_id <= current_admin_id:
+                # Not permitted
+                flash("You cannot remove admin status from users with equal or higher admin rank.", "error")
+                conn.close()
+                return redirect(url_for("admin_users"))
+
+        # Attempt update
         try:
-            conn.execute(
-                'INSERT INTO users (username, email, balance) VALUES (?, ?, ?)',
-                (username, email, balance)
-            )
+            cursor.execute("""
+                UPDATE users
+                SET username = ?, email = ?, is_admin = ?
+                WHERE user_id = ?
+            """, (new_username, new_email, requested_is_admin, user_id))
+
             conn.commit()
-            flash("User created successfully!", "success")
-            
-            # Log creation
+
+            # Track changes for logging
+            if new_username != old_username:
+                changes.append(f"username '{old_username}' → '{new_username}'")
+
+            if new_email != old_email:
+                changes.append(f"email '{old_email}' → '{new_email}'")
+
+            if requested_is_admin != old_is_admin:
+                if requested_is_admin == 1:
+                    changes.append("admin status granted")
+                else:
+                    changes.append("admin status revoked")
+
+            change_msg = ", ".join(changes) if changes else "No changes"
+
+            # Build change log message
+            changes = []
+
+            if new_username != old_username:
+                changes.append(f"username '{old_username}' → '{new_username}'")
+
+            if new_email != old_email:
+                changes.append(f"email '{old_email}' → '{new_email}'")
+
+            if requested_is_admin != old_is_admin:
+                if requested_is_admin == 1:
+                    changes.append("admin status granted")
+                else:
+                    changes.append("admin status revoked")
+
+            change_msg = ", ".join(changes) if changes else "No changes"
+
             log_event(
-                41,  # Admin: User Created
-                f"Admin created user '{username}' with balance {balance}.",
-                user_id=session.get('user_id')
+                48,  # Admin: User edited
+                f"Admin edited user {user_id}: {change_msg}",
+                user_id=current_admin_id
             )
 
-            return redirect(url_for('admin_users'))
+
+            flash("User updated successfully!", "success")
+
         except sqlite3.IntegrityError:
             flash("Username or email already exists.", "error")
-            log_event(
-                42,  # Admin: User Creation Failed
-                f"Admin attempted to create user '{username}' but username/email exists.",
-                user_id=session.get('user_id')
-            )
-        finally:
-            conn.close()
-    
-    return render_template('admin_user_create.html')
+
+        conn.close()
+        return redirect(url_for("admin_users"))
+
+    # GET request → show page
+    conn.close()
+    return render_template(
+        "admin_user_edit.html",
+        user=user,
+        current_admin_id=current_admin_id
+    )
+
+
+@app.route('/admin/user/<int:user_id>/portfolio')
+def admin_user_portfolio(user_id):
+    check = require_admin()
+    if check: return check
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    user = cursor.execute(
+        "SELECT user_id, username, email, balance FROM users WHERE user_id = ?",
+        (user_id,)
+    ).fetchone()
+
+    if not user:
+        conn.close()
+        flash("User not found.", "error")
+        return redirect(url_for('admin_users'))
+
+    portfolio = cursor.execute("""
+        SELECT p.quantity, p.avg_cost, s.symbol, s.company_name
+        FROM portfolio p
+        JOIN stocks s ON p.stock_id = s.stock_id
+        WHERE p.user_id = ?
+    """, (user_id,)).fetchall()
+
+    transactions = cursor.execute("""
+        SELECT t.*, s.symbol FROM transaction_history t
+        JOIN stocks s ON t.stock_id = s.stock_id
+        WHERE t.user_id = ?
+        ORDER BY timestamp DESC
+    """, (user_id,)).fetchall()
+
+    conn.close()
+    return render_template(
+        "admin_user_portfolio.html",
+        user=user,
+        portfolio=portfolio,
+        transactions=transactions
+    )
+
+@app.route('/admin/user/<int:user_id>/delete', methods=['POST'])
+def admin_user_delete(user_id):
+    check = require_admin()
+    if check: 
+        return check
+
+    # Prevent self-delete
+    if user_id == session.get("user_id"):
+        flash("You cannot delete your own account while logged in as admin.", "error")
+        return redirect(url_for("admin_users"))
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    user = cursor.execute(
+        "SELECT username FROM users WHERE user_id = ?",
+        (user_id,)
+    ).fetchone()
+
+    if not user:
+        conn.close()
+        flash("User not found.", "error")
+        return redirect(url_for('admin_users'))
+
+    cursor.execute("DELETE FROM users WHERE user_id = ?", (user_id,))
+    conn.commit()
+    conn.close()
+
+    log_event(
+        49,
+        f"Admin deleted user '{user['username']}' (ID {user_id})",
+        user_id=session.get("user_id")
+    )
+
+    flash("User deleted successfully.", "success")
+    return redirect(url_for("admin_users"))
+
+
 
 
 @app.route('/admin/stocks')
@@ -709,26 +876,57 @@ def admin_market_schedule():
         settings = get_market_schedule()
 
     if request.method == "POST":
+
+        # Collect day checkboxes
         all_days = ["monday","tuesday","wednesday","thursday","friday","saturday","sunday"]
         selected_days = [d for d in all_days if request.form.get(f"day_{d}") == d]
+
         holidays = request.form.get("holidays", "").strip()
 
+        # manual override fields
+        manual_override = 1 if request.form.get("manual_override") == "on" else 0
+        manual_message = request.form.get("manual_message", "").strip()
+
+        # UPDATE the full schedule at once
         conn.execute("""
             UPDATE market_schedule
-            SET trading_days = ?, holidays = ?
-        """, (",".join(selected_days), holidays))
+            SET trading_days = ?, holidays = ?, manual_override = ?, manual_message = ?
+        """, (
+            ",".join(selected_days),
+            holidays,
+            manual_override,
+            manual_message
+        ))
+
         conn.commit()
         conn.close()
 
+        # Flash message
         flash("Market schedule updated!", "success")
 
+        readable_override = "ON" if manual_override else "OFF"
         log_event(
-            47,  # Admin: Market Schedule Updated
-            f"Admin updated market schedule: trading days {','.join(selected_days)}, holidays: {holidays or 'none'}.",
-            user_id=session.get('user_id')
+            47, #Market Schedule Updated
+            f"Admin updated schedule: days={','.join(selected_days)}, holidays={holidays or 'none'}, "
+            f"override={readable_override}, msg='{manual_message or 'none'}'.",
+            user_id=session.get("user_id")
         )
 
         return redirect(url_for("admin_market_schedule"))
+
+    conn.close()
+
+    # Parse active days list for template
+    active_days = settings["trading_days"].split(",") if settings["trading_days"] else []
+    all_days = ["monday","tuesday","wednesday","thursday","friday","saturday","sunday"]
+
+    return render_template(
+        "admin_market_schedule.html",
+        settings=settings,
+        active_days=active_days,
+        days=all_days
+    )
+
 
     conn.close()
     active_days = settings["trading_days"].split(",") if settings["trading_days"] else []
@@ -788,13 +986,15 @@ def admin_logs():
         31: "Buy order failed",
         32: "Sell order succeeded",
         33: "Sell order failed",
-        41: "Admin: User Created",
-        42: "Admin: User Creation Failed",
+        41: "Admin: Logs Downloaded",
+        42: "Admin: Logs Cleared",
         43: "Admin: Stock Created",
         44: "Admin: Stock Creation Failed",
         45: "Admin: Stock Price Updated",
         46: "Admin: Market Hours Updated",
-        47: "Admin: Market Schedule Updated"
+        47: "Admin: Market Schedule Updated",
+        48: "Admin: User edited",
+        49: "Admin: User deleted"
     }
 
     total_pages = (total_logs + per_page - 1) // per_page
@@ -808,6 +1008,67 @@ def admin_logs():
         event_types=event_types,
         selected_type=selected_type
     )
+
+@app.route('/admin/market/logs/download')
+def admin_logs_download():
+    check = require_admin()
+    if check:
+        return check
+
+    conn = get_db_connection()
+    logs = conn.execute("SELECT * FROM logs ORDER BY timestamp DESC").fetchall()
+    conn.close()
+
+    # Convert logs to CSV string
+    import csv
+    from io import StringIO
+
+    output = StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["log_id", "type", "details", "user_id", "timestamp"])
+
+    for log in logs:
+        writer.writerow([log["log_id"], log["type"], log["details"], log["user_id"], log["timestamp"]])
+
+    csv_data = output.getvalue()
+    output.close()
+
+    log_event(
+        41, #Logs Downloaded
+        "Admin downloaded a complete copy of the logs.",
+        user_id=session.get("user_id")
+    )
+
+    # Send the CSV file
+    from flask import Response
+    return Response(
+        csv_data,
+        mimetype="text/csv",
+        headers={"Content-Disposition": "attachment;filename=equisense_logs.csv"}
+    )
+
+@app.route('/admin/market/logs/clear', methods=['POST'])
+def admin_logs_clear():
+    check = require_admin()
+    if check:
+        return check
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    # Clear logs
+    cursor.execute("DELETE FROM logs")
+    conn.commit()
+
+    # Insert new log AFTER clearing (fresh table)
+    log_event(
+        42,
+        "Admin cleared all logs.",
+        user_id=session.get("user_id")
+    )
+
+    flash("All logs have been cleared.", "success")
+    return redirect(url_for('admin_logs'))
 
 
 @app.route('/admin/settings')
@@ -892,39 +1153,41 @@ def get_market_status():
     if not schedule:
         return {"status": "closed", "reason": "No schedule configured", "next_open": None}
 
-    # Manual override
+    # 1. MANUAL OVERRIDE
     if schedule["manual_override"]:
         msg = schedule["manual_message"] or "Market manually closed"
         next_open = compute_next_open(schedule)
+
         return {
             "status": "closed",
             "reason": f"Manual override: {msg}",
             "next_open": next_open
         }
 
+    # 2. NORMAL SCHEDULE CHECKS
     now = datetime.now()
     weekday = now.strftime("%A").lower()
     now_time_str = now.strftime("%H:%M")
 
-    # Parse schedule fields
     trading_days = (schedule["trading_days"] or "").split(",")
     holidays_raw = schedule["holidays"] or ""
+
+    # Parse each holiday line into its date field
     holidays = [h.strip() for h in holidays_raw.split("\n") if h.strip()]
-
-    # Check if today is a holiday
     mmdd = now.strftime("%m-%d")
+
+    # 3. HOLIDAY CHECK
     for h in holidays:
-        date_part = h.split(" - ")[0].strip()  # Extract "MM-DD" from "MM-DD - description"
-    if date_part == mmdd:
-        next_open = compute_next_open(schedule)
-        return {
-            "status": "closed",
-            "reason": f"Market closed for holiday: {h}",
-            "next_open": next_open
-        }
+        date_part = h.split(" - ")[0].strip()  # "MM-DD"
+        if date_part == mmdd:
+            next_open = compute_next_open(schedule)
+            return {
+                "status": "closed",
+                "reason": f"Market closed for holiday: {h}",
+                "next_open": next_open
+            }
 
-
-    # Check if today is a trading day
+    # 4. TRADING DAY CHECK
     if weekday not in trading_days:
         next_open = compute_next_open(schedule)
         return {
@@ -933,19 +1196,20 @@ def get_market_status():
             "next_open": next_open
         }
 
-    # Time window
+    # 5. TIME WINDOW CHECK
     open_time = schedule["open_time"]
     close_time = schedule["close_time"]
 
     if not (open_time <= now_time_str <= close_time):
-        next_open = None
+        # Determine next open time
         try:
-            # If we haven't yet reached open_time today
             if now_time_str < open_time:
-                h, m = [int(x) for x in open_time.split(":")]
+                # Will open later today
+                h, m = map(int, open_time.split(":"))
                 next_open_dt = now.replace(hour=h, minute=m, second=0, microsecond=0)
                 next_open = next_open_dt.strftime("%Y-%m-%d %H:%M:%S")
             else:
+                # Opens next valid day
                 next_open = compute_next_open(schedule)
         except:
             next_open = compute_next_open(schedule)
@@ -956,8 +1220,13 @@ def get_market_status():
             "next_open": next_open
         }
 
-    # Otherwise it's open
-    return {"status": "open", "reason": "Market is open", "next_open": None}
+    # 6. MARKET IS OPEN
+    return {
+        "status": "open",
+        "reason": "Market is open",
+        "next_open": None
+    }
+
 
 @app.route("/api/market/status")
 def api_market_status():
