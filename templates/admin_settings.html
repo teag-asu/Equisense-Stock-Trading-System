@@ -3,85 +3,84 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>EquiSense - System Settings</title>
+  <title>EquiSense - Generator Settings</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
 </head>
-<body>
-  <main>
-    <section class="panel">
-      <h2>System Settings</h2>
-      <p>Configure system parameters and preferences.</p>
-      
-      <form>
-        <div>
-          <h3>Trading Settings</h3>
-          <div>
-            <label for="min-trade">Minimum Trade Amount:</label>
-            <input type="number" id="min-trade" name="min-trade" value="1.00" step="0.01" min="0">
-          </div>
-          
-          <div>
-            <label for="max-trade">Maximum Trade Amount:</label>
-            <input type="number" id="max-trade" name="max-trade" value="100000.00" step="0.01" min="0">
-          </div>
-          
-          <div>
-            <label for="trading-fee">Trading Fee (%):</label>
-            <input type="number" id="trading-fee" name="trading-fee" value="0.1" step="0.01" min="0" max="100">
-          </div>
-        </div>
-        
-        <div style="margin-top: 2em;">
-          <h3>System Preferences</h3>
-          <div>
-            <label for="auto-backup">Automatic Backup:</label>
-            <select id="auto-backup" name="auto-backup">
-              <option value="daily">Daily</option>
-              <option value="weekly">Weekly</option>
-              <option value="monthly">Monthly</option>
-              <option value="disabled">Disabled</option>
-            </select>
-          </div>
-          
-          <div>
-            <label for="session-timeout">Session Timeout (minutes):</label>
-            <input type="number" id="session-timeout" name="session-timeout" value="30" min="5" max="480">
-          </div>
-          
-          <div>
-            <label for="max-users">Maximum Users:</label>
-            <input type="number" id="max-users" name="max-users" value="1000" min="1">
-          </div>
-        </div>
-        
-        <div style="margin-top: 2em;">
-          <h3>Security Settings</h3>
-          <div>
-            <input type="checkbox" id="require-2fa" name="require-2fa">
-            <label for="require-2fa">Require Two-Factor Authentication</label>
-          </div>
-          
-          <div>
-            <input type="checkbox" id="password-policy" name="password-policy" checked>
-            <label for="password-policy">Enforce Strong Password Policy</label>
-          </div>
-          
-          <div>
-            <input type="checkbox" id="login-attempts" name="login-attempts" checked>
-            <label for="login-attempts">Lock account after 5 failed login attempts</label>
-          </div>
-        </div>
-        
-        <div class="buttons" style="margin-top: 2em;">
-          <button type="submit">Save Settings</button>
-          <button type="button">Reset to Defaults</button>
-        </div>
-      </form>
-    </section>
-  </main>
 
-  <footer>
-    <p>&copy; 2025 EquiSense</p>
-  </footer>
+<body>
+<main>
+  <section class="panel">
+
+    <h2>Stock Price Generator Settings</h2>
+    <p>Configure automatic random market price movement.</p>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        <div class="flash-messages">
+          {% for category, message in messages %}
+            <div class="flash {{ category }}">{{ message }}</div>
+          {% endfor %}
+        </div>
+      {% endif %}
+    {% endwith %}
+
+    <form method="post">
+
+      <!-- Enable / Disable Generator -->
+      <div>
+        <input type="checkbox"
+               id="enabled"
+               name="enabled"
+               {% if settings.enabled %}checked{% endif %}>
+        <label for="enabled">Enable Price Generator</label>
+      </div>
+
+      <!-- Interval -->
+      <div>
+        <label for="interval_seconds">Update Interval (seconds):</label>
+        <input type="number"
+               id="interval_seconds"
+               name="interval_seconds"
+               min="1"
+               value="{{ settings.interval_seconds }}">
+      </div>
+
+      <!-- Volatility -->
+      <div>
+        <label for="volatility">Volatility (std dev of returns):</label>
+        <input type="number"
+               id="volatility"
+               name="volatility"
+               step="0.0001"
+               value="{{ settings.volatility }}">
+      </div>
+
+      <!-- Trend Bias -->
+      <div>
+        <label for="trend_bias">Trend Bias (drift per tick):</label>
+        <input type="number"
+               id="trend_bias"
+               name="trend_bias"
+               step="0.0001"
+               value="{{ settings.trend_bias }}">
+      </div>
+
+      <!-- Exaggeration -->
+      <div>
+        <label for="exaggeration">Exaggeration Multiplier:</label>
+        <input type="number"
+               id="exaggeration"
+               name="exaggeration"
+               step="0.1"
+               min="0.1"
+               value="{{ settings.exaggeration }}">
+      </div>
+
+      <button type="submit">Save Settings</button>
+
+    </form>
+  </section>
+</main>
+
 </body>
 </html>

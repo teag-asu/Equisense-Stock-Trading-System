@@ -106,6 +106,29 @@ CREATE TABLE IF NOT EXISTS logs (
 );
 ''')
 
+#Creates price generator setting table
+cursor.execute('''
+CREATE TABLE IF NOT EXISTS price_generator_settings (
+    id INTEGER PRIMARY KEY CHECK(id = 1),
+    enabled INTEGER DEFAULT 1,
+    interval_seconds INTEGER DEFAULT 10,
+    volatility REAL DEFAULT 0.01,
+    trend_bias REAL DEFAULT 0.0
+    exaggeration REAL DEFAULT 1.0
+);
+''')
+
+#Creates price history table
+cursor.execute('''
+CREATE TABLE IF NOT EXISTS price_history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    stock_id INTEGER NOT NULL,
+    price REAL NOT NULL,
+    timestamp TEXT DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (stock_id) REFERENCES stocks(stock_id)
+);
+''')
+
 # Commit changes and close connection
 conn.commit()
 conn.close()

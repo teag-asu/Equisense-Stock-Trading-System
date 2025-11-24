@@ -1,9 +1,13 @@
 import os
 from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify
 from datetime import datetime, timedelta
+from threading import Thread
 import sqlite3
 import bcrypt
 import json
+import time
+import random
+import math
 
 app = Flask(__name__)
 
@@ -994,7 +998,8 @@ def admin_logs():
         46: "Admin: Market Hours Updated",
         47: "Admin: Market Schedule Updated",
         48: "Admin: User edited",
-        49: "Admin: User deleted"
+        49: "Admin: User deleted",
+        50: "Stock price generator settings updated"
     }
 
     total_pages = (total_logs + per_page - 1) // per_page
@@ -1071,13 +1076,63 @@ def admin_logs_clear():
     return redirect(url_for('admin_logs'))
 
 
-@app.route('/admin/settings')
+@app.route('/admin/settings', methods=['GET', 'POST'])
 def admin_settings():
     check = require_admin()
     if check:
         return check
 
-    return render_template('admin_settings.html')
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    # Load current settings
+    settings = get_generator_settings()
+
+    if request.method == "POST":
+    
+        # Extract new values from form
+        enabled = 1 if request.form.get("enabled") == "on" else 0
+        interval_seconds = int(request.form.get("interval_seconds", 10))
+        volatility = float(request.form.get("volatility", 0.005))
+        trend_bias = float(request.form.get("trend_bias", 0.0002))
+        exaggeration = float(request.form.get("exaggeration", 1.0))
+
+        # Track changes for logging
+        changes = []
+        def compare(field, old, new):
+            if float(old) != float(new):
+                changes.append(f"{field}: {old} → {new}")
+
+        compare("enabled", settings["enabled"], enabled)
+        compare("interval_seconds", settings["interval_seconds"], interval_seconds)
+        compare("volatility", settings["volatility"], volatility)
+        compare("trend_bias", settings["trend_bias"], trend_bias)
+        compare("exaggeration", settings["exaggeration"], exaggeration)
+
+        # Update DB
+        cursor.execute("""
+            UPDATE price_generator_settings
+            SET enabled = ?, interval_seconds = ?, volatility = ?, trend_bias = ?, exaggeration = ?
+            WHERE id = 1
+        """, (enabled, interval_seconds, volatility, trend_bias, exaggeration))
+        conn.commit()
+
+        # Log changes
+        if changes:
+            log_event(
+                50,
+                "Generator settings updated: " + "; ".join(changes),
+                user_id=session.get("user_id")
+            )
+
+        flash("Settings updated successfully!", "success")
+        conn.close()
+        return redirect(url_for("admin_settings"))
+
+    # GET request
+    conn.close()
+    return render_template("admin_settings.html", settings=settings)
+
 
 def get_market_schedule():
     conn = get_db_connection()
@@ -1255,7 +1310,102 @@ def log_event(event_type, details, user_id=None):
     conn.commit()
     conn.close()
 
+#stuff for the price generator
 
+def get_generator_settings():
+    conn = sqlite3.connect("stock_trading.db")
+    conn.row_factory = sqlite3.Row
+    row = conn.execute("SELECT * FROM price_generator_settings WHERE id = 1").fetchone()
+    conn.close()
+
+    if not row:
+        # initialize settings if they don't exist
+        conn = sqlite3.connect("stock_trading.db")
+        conn.execute("""
+            INSERT INTO price_generator_settings (id, enabled, interval_seconds, volatility, trend_bias)
+            VALUES (1, 1, 10, 0.01, 0.0)
+        """)
+        conn.commit()
+        conn.close()
+        return get_generator_settings()
+
+    return row
+
+def apply_price_change(old_price, volatility, trend_bias):
+    """
+    Generate a new stock price using Gaussian noise.
+    
+    - volatility = standard deviation of returns (e.g. 0.01 = 1%)
+    - trend_bias = average directional drift (e.g. 0.0005 for slight upward trend)
+
+    Price model:
+        new_price = old_price * exp( GaussianNoise + trend_bias )
+    """
+    # Gaussian noise, centered at 0
+    gaussian_return = random.gauss(mu=0, sigma=volatility)
+
+    # Add drift
+    total_return = gaussian_return + trend_bias
+
+    # Compute new price using log-normal model
+    new_price = old_price * math.exp(total_return)
+
+    # Avoid negative or zero price
+    if new_price < 0.01:
+        new_price = 0.01
+
+    return round(new_price, 2)
+
+def update_all_stock_prices():
+    settings = get_generator_settings()
+
+    if not settings["enabled"]:
+        return  # generator is off
+
+    volatility = settings["volatility"]
+    trend_bias = settings["trend_bias"]
+
+    conn = sqlite3.connect("stock_trading.db")
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+
+    stocks = cursor.execute("SELECT stock_id, price FROM stocks").fetchall()
+
+    for stock in stocks:
+        new_price = apply_price_change(stock["price"], volatility, trend_bias)
+
+        # update stock table
+        cursor.execute(
+            "UPDATE stocks SET price = ? WHERE stock_id = ?",
+            (new_price, stock["stock_id"])
+        )
+
+        # store in history table
+        cursor.execute(
+            "INSERT INTO price_history (stock_id, price) VALUES (?, ?)",
+            (stock["stock_id"], new_price)
+        )
+
+    conn.commit()
+    conn.close()
+
+def price_generator_loop():
+    print("Price generator loop initiated")
+    while True:
+        try:
+            settings = get_generator_settings()
+            interval = settings["interval_seconds"]
+            update_all_stock_prices()
+        except Exception as e:
+            print("Generator crashed:", e)
+        time.sleep(interval)
+
+#start background threat for price generator
+thread = Thread(target=price_generator_loop, daemon=True)
+thread.start()
 # run the flask app
-if __name__ == '__main__':
+if __name__ == '__main__': 
     app.run(debug=True, port=5000)
+
+
+# start background thread
