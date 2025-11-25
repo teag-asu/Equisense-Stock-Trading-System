@@ -16,11 +16,23 @@ app.secret_key = 'team34' # needed for flash messages and session management
 
 DB_NAME = 'stock_trading.db'
 
+def init_db_wal():
+    conn = sqlite3.connect(DB_NAME)
+    conn.execute("PRAGMA journal_mode=WAL;")
+    conn.execute("PRAGMA synchronous=NORMAL;")
+    conn.close()
+
+init_db_wal()
+
+
 # connect to the database
 def get_db_connection():
-    conn = sqlite3.connect(DB_NAME)
+    conn = sqlite3.connect(DB_NAME, timeout=5, check_same_thread=False)
     conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA journal_mode=WAL;")
+    conn.execute("PRAGMA busy_timeout = 5000;")
     return conn
+
 
 # password hashing helpers
 def hash_password(password: str) -> str:
@@ -164,7 +176,7 @@ def logout():
     return redirect(url_for('login'))
 
 
-# user dashboard
+# trading dashboard
 @app.route('/dashboard/<int:user_id>')
 def dashboard(user_id):
     # Require login
@@ -172,58 +184,236 @@ def dashboard(user_id):
         flash("You must be logged in to view that page.", "error")
         return redirect(url_for('login'))
 
+    # Pagination params
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 20, type=int)
+    offset = (page - 1) * per_page
+
     conn = get_db_connection()
-    user = conn.execute('SELECT * FROM users WHERE user_id = ?', (user_id,)).fetchone()
+    user = conn.execute(
+        'SELECT * FROM users WHERE user_id = ?', (user_id,)
+    ).fetchone()
 
     if not user:
         flash("User not found.", "error")
         conn.close()
         return redirect(url_for('login'))
 
-    # Get available stocks (all stocks in the system)
-    available_stocks = conn.execute('SELECT * FROM stocks ORDER BY symbol').fetchall()
-    
-    # Get user's portfolio with detailed information
+    # ----- AVAILABLE STOCKS -----
+    available_stocks = conn.execute('''
+        SELECT s.stock_id, s.symbol, s.company_name, s.price,
+               COALESCE(ph_latest.price - ph_prev.price, 0) AS last_change
+        FROM stocks s
+        LEFT JOIN (
+            SELECT ph1.stock_id, ph1.price
+            FROM price_history ph1
+            JOIN (
+                SELECT stock_id, MAX(timestamp) AS max_time
+                FROM price_history
+                GROUP BY stock_id
+            ) latest ON ph1.stock_id = latest.stock_id AND ph1.timestamp = latest.max_time
+        ) ph_latest ON s.stock_id = ph_latest.stock_id
+        LEFT JOIN (
+            SELECT ph2.stock_id, ph2.price
+            FROM price_history ph2
+            JOIN (
+                SELECT stock_id, MAX(timestamp) AS prev_time
+                FROM price_history
+                WHERE timestamp < (
+                    SELECT MAX(timestamp) 
+                    FROM price_history ph3 
+                    WHERE ph3.stock_id = price_history.stock_id
+                )
+                GROUP BY stock_id
+            ) prev ON ph2.stock_id = prev.stock_id AND ph2.timestamp = prev.prev_time
+        ) ph_prev ON s.stock_id = ph_prev.stock_id
+        ORDER BY s.symbol
+    ''').fetchall()
+
+    # ----- PORTFOLIO -----
     portfolio = conn.execute('''
-        SELECT s.stock_id, s.symbol, s.company_name, s.price as current_price,
+        SELECT s.stock_id, s.symbol, s.company_name, s.price AS current_price,
                p.quantity, p.avg_cost, p.total_invested,
                (p.quantity * s.price) AS value,
-               (s.price - p.avg_cost) * p.quantity AS unrealized_pl
+               (s.price - p.avg_cost) * p.quantity AS unrealized_pl,
+               COALESCE(ph_latest.price - ph_prev.price, 0) AS last_change
         FROM portfolio p
         JOIN stocks s ON p.stock_id = s.stock_id
+        LEFT JOIN (
+            SELECT ph1.stock_id, ph1.price
+            FROM price_history ph1
+            JOIN (
+                SELECT stock_id, MAX(timestamp) AS max_time
+                FROM price_history
+                GROUP BY stock_id
+            ) latest ON ph1.stock_id = latest.stock_id AND ph1.timestamp = latest.max_time
+        ) ph_latest ON s.stock_id = ph_latest.stock_id
+        LEFT JOIN (
+            SELECT ph2.stock_id, ph2.price
+            FROM price_history ph2
+            JOIN (
+                SELECT stock_id, MAX(timestamp) AS prev_time
+                FROM price_history
+                WHERE timestamp < (
+                    SELECT MAX(timestamp)
+                    FROM price_history ph3
+                    WHERE ph3.stock_id = price_history.stock_id
+                )
+                GROUP BY stock_id
+            ) prev ON ph2.stock_id = prev.stock_id AND ph2.timestamp = prev.prev_time
+        ) ph_prev ON s.stock_id = ph_prev.stock_id
         WHERE p.user_id = ? AND p.quantity > 0
         ORDER BY s.symbol
     ''', (user_id,)).fetchall()
-    
-    # Get transaction history
+
+
+    # ----- PERFORMANCE METRICS -----
+    total_deposited = user["total_deposited"] or 0
+    total_withdrawn = user["total_withdrawn"] or 0
+    cash_balance = user["balance"]
+    portfolio_value = sum(p["value"] for p in portfolio) if portfolio else 0
+    overall_profit = (portfolio_value + cash_balance + total_withdrawn) - total_deposited
+    profit_pct = (overall_profit / total_deposited * 100) if total_deposited > 0 else 0
+
+    # ----- PRICE HISTORY CHART DATA -----
+    held_ids = [p["stock_id"] for p in portfolio]
+    if held_ids:
+        placeholders = ",".join("?" * len(held_ids))
+        price_rows = conn.execute(f'''
+            SELECT stock_id, price, timestamp
+            FROM price_history
+            WHERE stock_id IN ({placeholders})
+            ORDER BY timestamp ASC
+        ''', held_ids).fetchall()
+    else:
+        price_rows = []
+
+    portfolio_history = {}
+    for row in price_rows:
+        ts = row["timestamp"]
+        price = row["price"]
+        sid = row["stock_id"]
+        qty = next((p["quantity"] for p in portfolio if p["stock_id"] == sid), 0)
+        if qty == 0:
+            continue
+        portfolio_history.setdefault(ts, 0)
+        portfolio_history[ts] += qty * price
+
+    chart_labels = sorted(portfolio_history.keys())
+    chart_values = [portfolio_history[t] for t in chart_labels]
+
+    # ----- TRANSACTION HISTORY -----
+    total_transactions = conn.execute(
+        'SELECT COUNT(*) FROM transaction_history WHERE user_id = ?', (user_id,)
+    ).fetchone()[0] or 0
+    total_pages = (total_transactions + per_page - 1) // per_page
+
     transaction_history = conn.execute('''
         SELECT th.*, s.symbol
         FROM transaction_history th
         JOIN stocks s ON th.stock_id = s.stock_id
         WHERE th.user_id = ?
         ORDER BY th.timestamp DESC
-        LIMIT 50
-    ''', (user_id,)).fetchall()
-    
+        LIMIT ? OFFSET ?
+    ''', (user_id, per_page, offset)).fetchall()
+
     conn.close()
 
     return render_template(
         'dashboard.html',
         user=user,
-        balance=user['balance'],
+        balance=cash_balance,
         portfolio=portfolio,
         available_stocks=available_stocks,
         transaction_history=transaction_history,
-        user_id=user_id
+        total_transactions=total_transactions,
+        total_pages=total_pages,
+        page=page,
+        per_page=per_page,
+        user_id=user_id,
+        overall_profit=overall_profit,
+        profit_pct=profit_pct,
+        chart_labels=chart_labels,
+        chart_values=chart_values
     )
 
-# unified deposit/withdraw (so they can share an input field)
+
+
+# ----- API: Live stock prices -----
+@app.route("/api/prices")
+def api_prices():
+    conn = get_db_connection()
+    stocks = conn.execute('''
+        WITH latest_prices AS (
+            SELECT ph1.stock_id, ph1.price,
+                   ROW_NUMBER() OVER (PARTITION BY ph1.stock_id ORDER BY ph1.id DESC) AS rn
+            FROM price_history ph1
+        )
+        SELECT s.stock_id, s.symbol, s.company_name, s.price,
+               (lp1.price - lp2.price) AS last_change
+        FROM stocks s
+        LEFT JOIN latest_prices lp1 ON s.stock_id = lp1.stock_id AND lp1.rn = 1
+        LEFT JOIN latest_prices lp2 ON s.stock_id = lp2.stock_id AND lp2.rn = 2
+        ORDER BY s.symbol
+    ''').fetchall()
+    conn.close()
+
+    return jsonify([
+        {
+            "stock_id": s["stock_id"],
+            "symbol": s["symbol"],
+            "company_name": s["company_name"],
+            "price": s["price"],
+            "last_change": s["last_change"] or 0
+        }
+        for s in stocks
+    ])
+
+
+    return jsonify([
+        {
+            "stock_id": s["stock_id"],
+            "symbol": s["symbol"],
+            "company_name": s["company_name"],
+            "price": s["price"],
+            "last_change": s["last_change"] or 0
+        }
+        for s in stocks
+    ])
+
+
+#Price history API, used for stock chart
+@app.route('/api/price_history/<int:stock_id>')
+def api_price_history(stock_id):
+    conn = get_db_connection()
+    # Get all price history entries for the stock, oldest first
+    rows = conn.execute('''
+        SELECT price, timestamp
+        FROM price_history
+        WHERE stock_id = ?
+        ORDER BY timestamp ASC
+    ''', (stock_id,)).fetchall()
+    conn.close()
+
+    # Convert to JSON-friendly format
+    data = {
+        "stock_id": stock_id,
+        "timestamps": [row["timestamp"] for row in rows],
+        "prices": [row["price"] for row in rows]
+    }
+
+    return jsonify(data)
+
+
+
 @app.route('/depositwithdraw/<int:user_id>', methods=['POST'])
 def depositwithdraw(user_id):
+    # Security
     if 'user_id' not in session or session['user_id'] != user_id:
         flash("Unauthorized.", "error")
         return redirect(url_for('login'))
 
+    # Inputs
     amount = float(request.form['amount'])
     action = request.form['action']
 
@@ -232,45 +422,69 @@ def depositwithdraw(user_id):
         return redirect(url_for('dashboard', user_id=user_id))
 
     conn = get_db_connection()
-    user = conn.execute('SELECT balance FROM users WHERE user_id = ?', (user_id,)).fetchone()
+    conn.row_factory = sqlite3.Row
+
+    user = conn.execute(
+        'SELECT balance, total_deposited, total_withdrawn FROM users WHERE user_id = ?',
+        (user_id,)
+    ).fetchone()
 
     if not user:
-        flash("User not found.", "error")
         conn.close()
+        flash("User not found.", "error")
         return redirect(url_for('login'))
 
     balance = user['balance']
+    total_deposited = user['total_deposited']
+    total_withdrawn = user['total_withdrawn']
 
-    if action == 'deposit':
-        conn.execute('UPDATE users SET balance = balance + ? WHERE user_id = ?', (amount, user_id))
+    try:
+        if action == 'deposit':
+            new_balance = balance + amount
+            new_total_deposited = total_deposited + amount
 
-        log_event(
-            10,  # deposit event
-            f"User {user_id} deposited ${amount:.2f}.",
-            user_id=user_id
-        )
+            conn.execute('''
+                UPDATE users
+                SET balance = ?, total_deposited = ?
+                WHERE user_id = ?
+            ''', (new_balance, new_total_deposited, user_id))
 
-        flash(f"Deposited ${amount:.2f}.", "success")
+            msg = f"User {user_id} deposited ${amount:.2f}."
+            log_type = 10  # deposit event
+            flash(f"Deposited ${amount:.2f}.", "success")
 
-    elif action == 'withdraw':
-        if balance < amount:
-            flash("Insufficient funds.", "error")
+        elif action == 'withdraw':
+            if balance < amount:
+                conn.close()
+                flash("Insufficient funds.", "error")
+                return redirect(url_for('dashboard', user_id=user_id))
+
+            new_balance = balance - amount
+            new_total_withdrawn = total_withdrawn + amount
+
+            conn.execute('''
+                UPDATE users
+                SET balance = ?, total_withdrawn = ?
+                WHERE user_id = ?
+            ''', (new_balance, new_total_withdrawn, user_id))
+
+            msg = f"User {user_id} withdrew ${amount:.2f}."
+            log_type = 11  # withdrawal event
+            flash(f"Withdrew ${amount:.2f}.", "success")
+
+        else:
             conn.close()
+            flash("Invalid action.", "error")
             return redirect(url_for('dashboard', user_id=user_id))
 
-        conn.execute('UPDATE users SET balance = balance - ? WHERE user_id = ?', (amount, user_id))
+        conn.commit()
+    finally:
+        conn.close()
 
-        log_event(
-            11,  # withdraw event
-            f"User {user_id} withdrew ${amount:.2f}.",
-            user_id=user_id
-        )
+    log_event(log_type, msg, user_id=user_id)
 
-        flash(f"Withdrew ${amount:.2f}.", "success")
-
-    conn.commit()
-    conn.close()
     return redirect(url_for('dashboard', user_id=user_id))
+
 
 
 
@@ -671,15 +885,18 @@ def admin_user_edit(user_id):
 @app.route('/admin/user/<int:user_id>/portfolio')
 def admin_user_portfolio(user_id):
     check = require_admin()
-    if check: return check
+    if check:
+        return check
 
     conn = get_db_connection()
     cursor = conn.cursor()
 
-    user = cursor.execute(
-        "SELECT user_id, username, email, balance FROM users WHERE user_id = ?",
-        (user_id,)
-    ).fetchone()
+    # Pull new deposit/withdraw columns as well
+    user = cursor.execute("""
+        SELECT user_id, username, email, balance, total_deposited, total_withdrawn
+        FROM users
+        WHERE user_id = ?
+    """, (user_id,)).fetchone()
 
     if not user:
         conn.close()
@@ -694,7 +911,8 @@ def admin_user_portfolio(user_id):
     """, (user_id,)).fetchall()
 
     transactions = cursor.execute("""
-        SELECT t.*, s.symbol FROM transaction_history t
+        SELECT t.*, s.symbol
+        FROM transaction_history t
         JOIN stocks s ON t.stock_id = s.stock_id
         WHERE t.user_id = ?
         ORDER BY timestamp DESC
@@ -707,6 +925,7 @@ def admin_user_portfolio(user_id):
         portfolio=portfolio,
         transactions=transactions
     )
+
 
 @app.route('/admin/user/<int:user_id>/delete', methods=['POST'])
 def admin_user_delete(user_id):
@@ -758,6 +977,53 @@ def admin_stocks():
     stocks = conn.execute('SELECT * FROM stocks').fetchall()
     conn.close()
     return render_template('admin_stocks.html', stocks=stocks)
+    
+@app.route('/admin/stocks/edit/<int:stock_id>', methods=['GET', 'POST'])
+def admin_stock_edit(stock_id):
+    check = require_admin()
+    if check:
+        return check
+
+    conn = get_db_connection()
+    stock = conn.execute('SELECT * FROM stocks WHERE stock_id = ?', (stock_id,)).fetchone()
+    if not stock:
+        conn.close()
+        flash("Stock not found", "error")
+        return redirect(url_for('admin_stocks'))
+
+    if request.method == 'POST':
+        symbol = request.form['symbol'].upper().strip()
+        company_name = request.form['company_name'].strip()
+        if not symbol or not company_name:
+            flash("All fields are required", "error")
+            return redirect(request.url)
+        try:
+            conn.execute('UPDATE stocks SET symbol = ?, company_name = ? WHERE stock_id = ?',
+                         (symbol, company_name, stock_id))
+            conn.commit()
+            flash(f"Stock {symbol} updated successfully", "success")
+            return redirect(url_for('admin_stocks'))
+        except sqlite3.IntegrityError:
+            flash("Symbol already exists", "error")
+            return redirect(request.url)
+    conn.close()
+    return render_template('admin_stock_edit.html', stock=stock)
+
+
+
+@app.route('/admin/stocks/delete/<int:stock_id>', methods=['POST'])
+def admin_stock_delete(stock_id):
+    check = require_admin()
+    if check:
+        return check
+
+    conn = get_db_connection()
+    conn.execute('DELETE FROM stocks WHERE stock_id = ?', (stock_id,))
+    conn.commit()
+    conn.close()
+    flash("Stock deleted successfully", "success")
+    return redirect(url_for('admin_stocks'))
+
 
 
 @app.route('/admin/stock/create', methods=['GET', 'POST'])
@@ -1297,30 +1563,41 @@ def log_event(event_type, details, user_id=None):
     :param user_id: Optional user ID (None for system events)
     """
 
-    conn = get_db_connection()
-    cur = conn.cursor()
+    for _ in range(8):  # retry up to 8 times on locked DB
+        try:
+            conn = get_db_connection()
+            cur = conn.cursor()
 
-    timestamp = datetime.utcnow().isoformat()
+            timestamp = datetime.utcnow().isoformat()
 
-    cur.execute("""
-        INSERT INTO logs (type, details, timestamp, user_id)
-        VALUES (?, ?, ?, ?)
-    """, (event_type, details, timestamp, user_id))
+            cur.execute("""
+                INSERT INTO logs (type, details, timestamp, user_id)
+                VALUES (?, ?, ?, ?)
+            """, (event_type, details, timestamp, user_id))
 
-    conn.commit()
-    conn.close()
+            conn.commit()
+            conn.close()
+            return  # success
+        except sqlite3.OperationalError as e:
+            if "locked" in str(e).lower():
+                time.sleep(0.05)
+                continue
+            raise  # real error → raise immediately
+
+    print("log_event FAILED after all retries!")
+
 
 #stuff for the price generator
 
 def get_generator_settings():
-    conn = sqlite3.connect("stock_trading.db")
+    conn = get_db_connection()
     conn.row_factory = sqlite3.Row
     row = conn.execute("SELECT * FROM price_generator_settings WHERE id = 1").fetchone()
     conn.close()
 
     if not row:
         # initialize settings if they don't exist
-        conn = sqlite3.connect("stock_trading.db")
+        conn = get_db_connection()
         conn.execute("""
             INSERT INTO price_generator_settings (id, enabled, interval_seconds, volatility, trend_bias)
             VALUES (1, 1, 10, 0.01, 0.0)
@@ -1355,39 +1632,53 @@ def apply_price_change(old_price, volatility, trend_bias):
         new_price = 0.01
 
     return round(new_price, 2)
+    
+def safe_execute(query, params=()):
+    for _ in range(5):  # retry up to 5 times
+        try:
+            conn = get_db_connection()
+            conn.execute(query, params)
+            conn.commit()
+            conn.close()
+            return
+        except sqlite3.OperationalError as e:
+            if "locked" in str(e).lower():
+                time.sleep(0.1)  # small delay then retry
+            else:
+                raise
+    print("DB write failed after retries:", query)
 
 def update_all_stock_prices():
     settings = get_generator_settings()
 
     if not settings["enabled"]:
-        return  # generator is off
+        return
 
     volatility = settings["volatility"]
     trend_bias = settings["trend_bias"]
 
-    conn = sqlite3.connect("stock_trading.db")
+    # GET STOCK LIST WITH ONE CONNECTION
+    conn = get_db_connection()
     conn.row_factory = sqlite3.Row
-    cursor = conn.cursor()
+    stocks = conn.execute("SELECT stock_id, price FROM stocks").fetchall()
+    conn.close()
 
-    stocks = cursor.execute("SELECT stock_id, price FROM stocks").fetchall()
-
+    # PROCESS EACH STOCK USING safe_execute (each has its own conn)
     for stock in stocks:
         new_price = apply_price_change(stock["price"], volatility, trend_bias)
 
-        # update stock table
-        cursor.execute(
+        # update main price
+        safe_execute(
             "UPDATE stocks SET price = ? WHERE stock_id = ?",
             (new_price, stock["stock_id"])
         )
 
-        # store in history table
-        cursor.execute(
+        # update history
+        safe_execute(
             "INSERT INTO price_history (stock_id, price) VALUES (?, ?)",
             (stock["stock_id"], new_price)
         )
 
-    conn.commit()
-    conn.close()
 
 def price_generator_loop():
     print("Price generator loop initiated")
@@ -1396,16 +1687,16 @@ def price_generator_loop():
             settings = get_generator_settings()
             interval = settings["interval_seconds"]
             update_all_stock_prices()
+            time.sleep(interval)
         except Exception as e:
             print("Generator crashed:", e)
-        time.sleep(interval)
+            time.sleep(10)
 
 #start background threat for price generator
 thread = Thread(target=price_generator_loop, daemon=True)
 thread.start()
+
 # run the flask app
 if __name__ == '__main__': 
     app.run(debug=True, port=5000)
 
-
-# start background thread

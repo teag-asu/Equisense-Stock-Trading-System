@@ -13,6 +13,8 @@
       <h2>Portfolio for {{ user.username }}</h2>
       <p>Email: {{ user.email }}</p>
       <p>Balance: ${{ "%.2f"|format(user.balance) }}</p>
+	  <p>Total Deposited: ${{ "%.2f"|format(user.total_deposited or 0) }}</p>
+	  <p>Total Withdrawn: ${{ "%.2f"|format(user.total_withdrawn or 0) }}</p>
     </div>
 
     <div class="card-content">

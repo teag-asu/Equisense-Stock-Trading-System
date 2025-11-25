@@ -15,7 +15,9 @@ CREATE TABLE IF NOT EXISTS users (
     email TEXT NOT NULL UNIQUE,
     balance REAL DEFAULT 0.0,
     password_hash TEXT NOT NULL,
-    is_admin INTEGER DEFAULT 0
+    is_admin INTEGER DEFAULT 0,
+    total_deposited REAL DEFAULT 0.0,
+    total_withdrawn REAL DEFAULT 0.0
 );
 ''')
 

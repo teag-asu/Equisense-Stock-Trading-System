@@ -5,8 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>EquiSense - Trading Dashboard</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+  <style>
+    .price-up { color: green; }
+    .price-down { color: red; }
+    .positive { color: green; }
+    .negative { color: red; }
+    .disabled-btn { opacity: 0.5; pointer-events: none; }
+  </style>
 </head>
-
 <body>
 <header>
   <h1>EquiSense</h1>
@@ -29,8 +35,7 @@
 <main>
 
   <!-- Market status banner -->
-  <div id="market-status-banner"
-       style="display:none; padding:12px; margin:12px; border-radius:8px; background:#ffeeee;">
+  <div id="market-status-banner" style="display:none; padding:12px; margin:12px; border-radius:8px; background:#ffeeee;">
     <strong id="market-status-text"></strong>
     <div id="market-reason" style="margin-top:6px;"></div>
     <div id="market-nextopen" style="margin-top:6px; font-style:italic;"></div>
@@ -52,28 +57,35 @@
     <div class="account-summary">
       <div class="balance-item">
         <h3>Cash Balance</h3>
-        <p>${{ "%.2f"|format(balance) }}</p>
+        <p id="cash-balance">${{ "%.2f"|format(balance) }}</p>
       </div>
       <div class="balance-item">
         <h3>Portfolio Value</h3>
-        <p>${{ "%.2f"|format(portfolio|sum(attribute='value') or 0) }}</p>
+        <p id="portfolio-value">${{ "%.2f"|format(portfolio|sum(attribute='value') or 0) }}</p>
       </div>
       <div class="balance-item">
         <h3>Total Account Value</h3>
-        <p>${{ "%.2f"|format(balance + (portfolio|sum(attribute='value') or 0)) }}</p>
+        <p id="total-value">${{ "%.2f"|format(balance + (portfolio|sum(attribute='value') or 0)) }}</p>
+      </div>
+      <div class="balance-item">
+        <h3>Overall Profit</h3>
+        <p id="overall-profit">${{ "%.2f"|format(overall_profit) }}</p>
+      </div>
+      <div class="balance-item">
+        <h3>Profit %</h3>
+        <p id="profit-pct">{{ "%.2f"|format(profit_pct) }}%</p>
       </div>
     </div>
   </section>
 
-  <!-- Account Actions -->
+  <!-- Deposit/Withdraw -->
   <section class="panel">
-    <h2>Account Actions</h2>
     <div class="form-section">
       <div class="depositwithdraw">
         <h3>Deposit / Withdraw</h3>
         <form action="{{ url_for('depositwithdraw', user_id=user_id) }}" method="post">
           <label for="account-amount">Amount</label>
-          <input type="number" id="account-amount" name="amount" step="0.01" required>
+          <input type="number" id="account-amount" name="amount" step="0.01" min="0.01" required>
           <div class="button-row">
             <button type="submit" name="action" value="deposit">Deposit</button>
             <button type="submit" name="action" value="withdraw">Withdraw</button>
@@ -87,28 +99,33 @@
   <section class="panel">
     <h2>Available Stocks</h2>
     {% if available_stocks %}
-      <table>
-        <tr>
-          <th>Symbol</th>
-          <th>Company</th>
-          <th>Current Price</th>
-          <th>Action</th>
-        </tr>
-        {% for stock in available_stocks %}
-          <tr>
-            <td>{{ stock.symbol }}</td>
-            <td>{{ stock.company_name }}</td>
-            <td>${{ "%.2f"|format(stock.price) }}</td>
-            <td>
-              <form action="{{ url_for('buy_stock', user_id=user_id) }}" method="post" style="display:inline;">
-                <input type="hidden" name="stock_id" value="{{ stock.stock_id }}">
-                <input type="number" name="quantity" placeholder="Qty" min="1" required style="width:60px;">
-                <button type="submit">Buy</button>
-              </form>
-            </td>
-          </tr>
-        {% endfor %}
-      </table>
+    <table id="available-stocks-table">
+      <tr>
+        <th>Symbol</th>
+        <th>Company</th>
+        <th>Current Price</th>
+        <th>Last Change</th>
+        <th>Action</th>
+      </tr>
+      {% for stock in available_stocks %}
+      <tr class="stock-row" data-stock="{{ stock.stock_id }}">
+        <td>{{ stock.symbol }}</td>
+        <td>{{ stock.company_name }}</td>
+        <td class="current-price">${{ "%.2f"|format(stock.price) }}</td>
+        <td class="last-change {{ 'price-up' if stock.last_change >=0 else 'price-down' }}">
+          ${{ "%.2f"|format(stock.last_change or 0) }}
+        </td>
+        <td>
+          <form action="{{ url_for('buy_stock', user_id=user_id) }}" method="post" style="display:inline;">
+            <input type="hidden" name="stock_id" value="{{ stock.stock_id }}">
+            <input type="number" name="quantity" placeholder="Qty" min="1" required style="width:60px;">
+            <button type="submit">Buy</button>
+          </form>
+          <button class="view-stock-btn" data-stock="{{ stock.stock_id }}">View Chart</button>
+        </td>
+      </tr>
+      {% endfor %}
+    </table>
     {% else %}
       <p>No stocks available. Admin needs to add stocks to the system.</p>
     {% endif %}
@@ -118,74 +135,55 @@
   <section class="panel">
     <h2>My Holdings</h2>
     {% if portfolio %}
-      <table>
-        <tr>
-          <th>Symbol</th>
-          <th>Company</th>
-          <th>Shares</th>
-          <th>Avg Cost</th>
-          <th>Current Price</th>
-          <th>Market Value</th>
-          <th>P/L</th>
-          <th>Action</th>
-        </tr>
-        {% for holding in portfolio %}
-          <tr>
-            <td>{{ holding.symbol }}</td>
-            <td>{{ holding.company_name }}</td>
-            <td>{{ holding.quantity }}</td>
-            <td>${{ "%.2f"|format(holding.avg_cost or 0) }}</td>
-            <td>${{ "%.2f"|format(holding.current_price) }}</td>
-            <td>${{ "%.2f"|format(holding.value) }}</td>
-            <td class="{% if holding.unrealized_pl >= 0 %}positive{% else %}negative{% endif %}">
-              ${{ "%.2f"|format(holding.unrealized_pl or 0) }}
-            </td>
-            <td>
-              <form action="{{ url_for('sell_stock', user_id=user_id) }}" method="post" style="display:inline;">
-                <input type="hidden" name="stock_id" value="{{ holding.stock_id }}">
-                <input type="number" name="quantity" placeholder="Qty" min="1" max="{{ holding.quantity }}" required style="width:60px;">
-                <button type="submit">Sell</button>
-              </form>
-            </td>
-          </tr>
-        {% endfor %}
-      </table>
+    <table id="portfolio-table">
+      <tr>
+        <th>Symbol</th>
+        <th>Company</th>
+        <th>Shares</th>
+        <th>Avg Cost</th>
+        <th>Current Price</th>
+        <th>Market Value</th>
+        <th>P/L</th>
+        <th>Last Change</th>
+        <th>Action</th>
+      </tr>
+      {% for holding in portfolio %}
+      <tr class="stock-row" 
+          data-stock="{{ holding.stock_id }}" 
+          data-quantity="{{ holding.quantity }}" 
+          data-avg-cost="{{ holding.avg_cost }}">
+        <td>{{ holding.symbol }}</td>
+        <td>{{ holding.company_name }}</td>
+        <td>{{ holding.quantity }}</td>
+        <td>${{ "%.2f"|format(holding.avg_cost or 0) }}</td>
+        <td class="current-price">${{ "%.2f"|format(holding.current_price) }}</td>
+        <td class="market-value">${{ "%.2f"|format(holding.value) }}</td>
+        <td class="pl {{ 'positive' if holding.unrealized_pl >=0 else 'negative' }}">
+          ${{ "%.2f"|format(holding.unrealized_pl or 0) }}
+        </td>
+        <td class="last-change {{ 'price-up' if holding.last_change >=0 else 'price-down' }}">
+          ${{ "%.2f"|format(holding.last_change or 0) }}
+        </td>
+        <td>
+          <form action="{{ url_for('sell_stock', user_id=user_id) }}" method="post" style="display:inline;">
+            <input type="hidden" name="stock_id" value="{{ holding.stock_id }}">
+            <input type="number" name="quantity" placeholder="Qty" min="1" max="{{ holding.quantity }}" required style="width:60px;">
+            <button type="submit">Sell</button>
+          </form>
+          <button class="view-stock-btn" data-stock="{{ holding.stock_id }}">View Chart</button>
+        </td>
+      </tr>
+      {% endfor %}
+    </table>
     {% else %}
       <p>No holdings yet. Buy some stocks to get started!</p>
     {% endif %}
   </section>
 
-  <!-- Transaction History -->
+  <!-- Performance / Chart -->
   <section class="panel">
-    <h2>Transaction History</h2>
-    {% if transaction_history %}
-      <table>
-        <tr>
-          <th>Date</th>
-          <th>Type</th>
-          <th>Symbol</th>
-          <th>Quantity</th>
-          <th>Price</th>
-          <th>Total Value</th>
-          <th>Cash After</th>
-        </tr>
-        {% for transaction in transaction_history %}
-          <tr>
-            <td>{{ transaction.timestamp }}</td>
-            <td class="{% if transaction.order_type == 'BUY' %}buy{% else %}sell{% endif %}">
-              {{ transaction.order_type }}
-            </td>
-            <td>{{ transaction.symbol }}</td>
-            <td>{{ transaction.quantity }}</td>
-            <td>${{ "%.2f"|format(transaction.price) }}</td>
-            <td>${{ "%.2f"|format(transaction.quantity * transaction.price) }}</td>
-            <td>${{ "%.2f"|format(transaction.cash_after) }}</td>
-          </tr>
-        {% endfor %}
-      </table>
-    {% else %}
-      <p>No transactions yet. Start trading to see your history!</p>
-    {% endif %}
+    <h2>Stock Price History</h2>
+    <canvas id="portfolioChart" width="600" height="300"></canvas>
   </section>
 
 </main>
@@ -194,68 +192,139 @@
   <p>&copy; 2025 EquiSense</p>
 </footer>
 
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
+// ---------- CHART ----------
+let currentStock = null;
+let chart = null;
+
+async function fetchChartData(stock_id) {
+  const res = await fetch(`/api/price_history/${stock_id}`);
+  if (!res.ok) return { timestamps: [], prices: [] };
+  return await res.json();
+}
+
+async function updateChart(stock_id) {
+  const data = await fetchChartData(stock_id);
+  const labels = data.timestamps;
+  const prices = data.prices;
+
+  if (!chart) {
+    const ctx = document.getElementById('portfolioChart').getContext('2d');
+    chart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: labels,
+        datasets: [{
+          label: 'Price ($)',
+          data: prices,
+          borderWidth: 2,
+          tension: 0.25
+        }]
+      },
+      options: {
+        scales: {
+          x: { title: { display: true, text: "Time" } },
+          y: { title: { display: true, text: "Price ($)" } }
+        }
+      }
+    });
+  } else {
+    chart.data.labels = labels;
+    chart.data.datasets[0].data = prices;
+    chart.update();
+  }
+}
+
+// Stock chart buttons
+document.querySelectorAll('.view-stock-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const stockId = btn.dataset.stock;
+    currentStock = stockId;
+    updateChart(stockId);
+  });
+});
+
+// ---------- DASHBOARD AUTO-UPDATE ----------
+async function updateAllStocks() {
+  try {
+    const res = await fetch('/api/prices');
+    if (!res.ok) return;
+    const stocks = await res.json();
+
+    stocks.forEach(stock => {
+      // Update Available Stocks
+      const availRow = document.querySelector(`#available-stocks-table .stock-row[data-stock='${stock.stock_id}']`);
+      if (availRow) {
+        availRow.querySelector('.current-price').textContent = `$${stock.price.toFixed(2)}`;
+        const lastEl = availRow.querySelector('.last-change');
+        lastEl.textContent = `$${(stock.last_change ?? 0).toFixed(2)}`;
+        lastEl.className = (stock.last_change ?? 0) >= 0 ? 'price-up last-change' : 'price-down last-change';
+      }
+
+      // Update Portfolio
+      const portRow = document.querySelector(`#portfolio-table .stock-row[data-stock='${stock.stock_id}']`);
+      if (portRow) {
+        const qty = parseFloat(portRow.dataset.quantity || 0);
+        const avg = parseFloat(portRow.dataset.avgCost || 0);
+
+        portRow.querySelector('.current-price').textContent = `$${stock.price.toFixed(2)}`;
+        portRow.querySelector('.market-value').textContent = `$${(qty * stock.price).toFixed(2)}`;
+        portRow.querySelector('.pl').textContent = `$${((stock.price - avg) * qty).toFixed(2)}`;
+        const lastEl = portRow.querySelector('.last-change');
+        lastEl.textContent = `$${(stock.last_change ?? 0).toFixed(2)}`;
+        lastEl.className = (stock.last_change ?? 0) >= 0 ? 'price-up last-change' : 'price-down last-change';
+      }
+    });
+  } catch (err) {
+    console.warn("Error updating stock tables:", err);
+  }
+}
+
+// ---------- MARKET STATUS ----------
 async function refreshMarketStatus() {
   try {
     const res = await fetch("/api/market/status");
     if (!res.ok) return;
-	console.log("test:");
     const status = await res.json();
-    // Banner elements
     const banner = document.getElementById("market-status-banner");
     const statusText = document.getElementById("market-status-text");
     const reasonEl = document.getElementById("market-reason");
     const nextOpenEl = document.getElementById("market-nextopen");
 
-    if (!banner || !statusText || !reasonEl || !nextOpenEl) return;
-
-    // All buy/sell forms
-    const buySellForms = document.querySelectorAll(
-      'form[action*="/buy_stock"], form[action*="/sell_stock"]'
-    );
-
     if (status.status === "open") {
-      // Market is open
       banner.style.display = "none";
-
-      // Enable all inputs/buttons in buy/sell forms
-      buySellForms.forEach(form => {
-        form.querySelectorAll("input, button").forEach(el => {
-          el.disabled = false;
-          el.classList.remove("disabled-btn");
-        });
+      document.querySelectorAll('form[action*="/buy_stock"], form[action*="/sell_stock"]').forEach(f => {
+        f.querySelectorAll("input, button").forEach(el => { el.disabled = false; el.classList.remove("disabled-btn"); });
       });
-
     } else {
-      // Market is closed
       banner.style.display = "block";
-      banner.style.background = "#ffebee"; // light red
+      banner.style.background = "#ffebee";
       statusText.textContent = "Market Closed";
       reasonEl.textContent = status.reason || "Market is currently closed.";
       nextOpenEl.textContent = status.next_open ? `Next open: ${status.next_open}` : "";
-
-      // Disable all inputs/buttons and apply CSS class
-      buySellForms.forEach(form => {
-        form.querySelectorAll("input, button").forEach(el => {
-          el.disabled = true;
-          el.classList.add("disabled-btn");
-        });
+      document.querySelectorAll('form[action*="/buy_stock"], form[action*="/sell_stock"]').forEach(f => {
+        f.querySelectorAll("input, button").forEach(el => { el.disabled = true; el.classList.add("disabled-btn"); });
       });
     }
-
   } catch (err) {
     console.warn("Could not refresh market status:", err);
   }
 }
 
-// Initial refresh and repeat every 30 seconds
+// ---------- INITIALIZE ----------
 document.addEventListener("DOMContentLoaded", () => {
   refreshMarketStatus();
+  updateAllStocks();
+  if (currentStock) updateChart(currentStock);
+
+  setInterval(() => {
+    updateAllStocks();
+    if (currentStock) updateChart(currentStock);
+  }, 5000);
+
   setInterval(refreshMarketStatus, 30000);
 });
 </script>
-
-
-
 </body>
 </html>

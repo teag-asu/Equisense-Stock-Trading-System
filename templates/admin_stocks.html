@@ -56,29 +56,39 @@
                     <th>Actions</th>
                   </tr>
                 </thead>
-                <tbody>
-                  {% for stock in stocks %}
-                    <tr>
-                      <td>{{ stock.stock_id }}</td>
-                      <td class="symbol-cell">
-                        <span class="symbol">{{ stock.symbol }}</span>
-                      </td>
-                      <td>{{ stock.company_name }}</td>
-                      <td class="price-cell">${{ "%.2f"|format(stock.price) }}</td>
-                      <td class="actions-cell">
-                        <button class="btn-icon" title="Edit Stock">
-                          <i class="fas fa-edit"></i>
-                        </button>
-                        <button class="btn-icon" title="View Details">
-                          <i class="fas fa-eye"></i>
-                        </button>
-                        <button class="btn-icon" title="Delete Stock">
-                          <i class="fas fa-trash"></i>
-                        </button>
-                      </td>
-                    </tr>
-                  {% endfor %}
-                </tbody>
+				<tbody>
+				  {% for stock in stocks %}
+					<tr>
+					  <td>{{ stock.stock_id }}</td>
+					  <td class="symbol-cell">
+						<span class="symbol">{{ stock.symbol }}</span>
+					  </td>
+					  <td>{{ stock.company_name }}</td>
+					  <td class="price-cell">${{ "%.2f"|format(stock.price) }}</td>
+					  <td class="actions-cell">
+
+						<!-- Edit Stock: navigate to edit page in same window -->
+						<form action="{{ url_for('admin_stock_edit', stock_id=stock.stock_id) }}"
+							  method="GET" style="display:inline;">
+						  <button class="btn-icon" title="Edit Stock">
+							<i class="fas fa-edit"></i>
+						  </button>
+						</form>
+
+						<!-- Delete Stock: confirmation -->
+						<form class="delete-stock-form"
+							  action="{{ url_for('admin_stock_delete', stock_id=stock.stock_id) }}"
+							  method="POST" style="display:inline;"
+							  onsubmit="return confirm('Are you sure you want to delete this stock? This action cannot be undone.');">
+						  <button class="btn-icon" title="Delete Stock">
+							<i class="fas fa-trash"></i>
+						  </button>
+						</form>
+
+					  </td>
+					</tr>
+				  {% endfor %}
+				</tbody>
               </table>
             </div>
           {% else %}
@@ -96,4 +106,14 @@
     </div>
   </main>
 </body>
+<script>
+  // Delete stock confirmation
+  document.querySelectorAll('.delete-stock-form').forEach(form => {
+    form.addEventListener('submit', e => {
+      const confirmed = confirm("Are you sure you want to delete this stock?");
+      if (!confirmed) e.preventDefault();
+    });
+  });
+</script>
+
 </html>
