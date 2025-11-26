@@ -115,7 +115,7 @@ CREATE TABLE IF NOT EXISTS price_generator_settings (
     enabled INTEGER DEFAULT 1,
     interval_seconds INTEGER DEFAULT 10,
     volatility REAL DEFAULT 0.01,
-    trend_bias REAL DEFAULT 0.0
+    trend_bias REAL DEFAULT 0.0,
     exaggeration REAL DEFAULT 1.0
 );
 ''')

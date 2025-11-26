@@ -190,132 +190,160 @@ def dashboard(user_id):
     offset = (page - 1) * per_page
 
     conn = get_db_connection()
+
+    # Verify user
     user = conn.execute(
-        'SELECT * FROM users WHERE user_id = ?', (user_id,)
+        "SELECT * FROM users WHERE user_id = ?", (user_id,)
     ).fetchone()
 
     if not user:
-        flash("User not found.", "error")
         conn.close()
+        flash("User not found.", "error")
         return redirect(url_for('login'))
 
-    # ----- AVAILABLE STOCKS -----
-    available_stocks = conn.execute('''
-        SELECT s.stock_id, s.symbol, s.company_name, s.price,
-               COALESCE(ph_latest.price - ph_prev.price, 0) AS last_change
-        FROM stocks s
-        LEFT JOIN (
-            SELECT ph1.stock_id, ph1.price
-            FROM price_history ph1
+    # ==========================================================================
+    # GET LATEST PRICES
+    # ==========================================================================
+    latest_prices = conn.execute("""
+        SELECT ph.stock_id, ph.price AS latest_price, ph.timestamp
+        FROM price_history ph
+        JOIN (
+            SELECT stock_id, MAX(timestamp) AS max_time
+            FROM price_history
+            GROUP BY stock_id
+        ) L ON ph.stock_id = L.stock_id AND ph.timestamp = L.max_time
+    """).fetchall()
+
+    latest_map = {row['stock_id']: row['latest_price'] for row in latest_prices}
+
+    # ==========================================================================
+    # GET PREVIOUS PRICES (timestamp just before latest)
+    # ==========================================================================
+    previous_prices = conn.execute("""
+        SELECT ph.stock_id, ph.price AS previous_price
+        FROM price_history ph
+        JOIN (
+            SELECT ph2.stock_id, MAX(ph2.timestamp) AS prev_time
+            FROM price_history ph2
             JOIN (
                 SELECT stock_id, MAX(timestamp) AS max_time
                 FROM price_history
                 GROUP BY stock_id
-            ) latest ON ph1.stock_id = latest.stock_id AND ph1.timestamp = latest.max_time
-        ) ph_latest ON s.stock_id = ph_latest.stock_id
-        LEFT JOIN (
-            SELECT ph2.stock_id, ph2.price
-            FROM price_history ph2
-            JOIN (
-                SELECT stock_id, MAX(timestamp) AS prev_time
-                FROM price_history
-                WHERE timestamp < (
-                    SELECT MAX(timestamp) 
-                    FROM price_history ph3 
-                    WHERE ph3.stock_id = price_history.stock_id
-                )
-                GROUP BY stock_id
-            ) prev ON ph2.stock_id = prev.stock_id AND ph2.timestamp = prev.prev_time
-        ) ph_prev ON s.stock_id = ph_prev.stock_id
-        ORDER BY s.symbol
-    ''').fetchall()
+            ) L2 ON ph2.stock_id = L2.stock_id
+            WHERE ph2.timestamp < L2.max_time
+            GROUP BY ph2.stock_id
+        ) P ON ph.stock_id = P.stock_id AND ph.timestamp = P.prev_time
+    """).fetchall()
 
-    # ----- PORTFOLIO -----
-    portfolio = conn.execute('''
-        SELECT s.stock_id, s.symbol, s.company_name, s.price AS current_price,
-               p.quantity, p.avg_cost, p.total_invested,
-               (p.quantity * s.price) AS value,
-               (s.price - p.avg_cost) * p.quantity AS unrealized_pl,
-               COALESCE(ph_latest.price - ph_prev.price, 0) AS last_change
+    prev_map = {row['stock_id']: row['previous_price'] for row in previous_prices}
+
+    # ==========================================================================
+    # BUILD AVAILABLE STOCKS
+    # ==========================================================================
+    stocks_raw = conn.execute("""
+        SELECT stock_id, symbol, company_name
+        FROM stocks
+        ORDER BY symbol
+    """).fetchall()
+
+    available_stocks = []
+    for s in stocks_raw:
+        stock_id = s["stock_id"]
+        latest = latest_map.get(stock_id, 0)
+        prev = prev_map.get(stock_id, latest)
+        available_stocks.append({
+            "stock_id": stock_id,
+            "symbol": s["symbol"],
+            "company_name": s["company_name"],
+            "price": latest,
+            "last_change": latest - prev
+        })
+
+    # ==========================================================================
+    # BUILD PORTFOLIO
+    # ==========================================================================
+    raw_portfolio = conn.execute("""
+        SELECT p.stock_id, s.symbol, s.company_name,
+               p.quantity, p.avg_cost, p.total_invested
         FROM portfolio p
         JOIN stocks s ON p.stock_id = s.stock_id
-        LEFT JOIN (
-            SELECT ph1.stock_id, ph1.price
-            FROM price_history ph1
-            JOIN (
-                SELECT stock_id, MAX(timestamp) AS max_time
-                FROM price_history
-                GROUP BY stock_id
-            ) latest ON ph1.stock_id = latest.stock_id AND ph1.timestamp = latest.max_time
-        ) ph_latest ON s.stock_id = ph_latest.stock_id
-        LEFT JOIN (
-            SELECT ph2.stock_id, ph2.price
-            FROM price_history ph2
-            JOIN (
-                SELECT stock_id, MAX(timestamp) AS prev_time
-                FROM price_history
-                WHERE timestamp < (
-                    SELECT MAX(timestamp)
-                    FROM price_history ph3
-                    WHERE ph3.stock_id = price_history.stock_id
-                )
-                GROUP BY stock_id
-            ) prev ON ph2.stock_id = prev.stock_id AND ph2.timestamp = prev.prev_time
-        ) ph_prev ON s.stock_id = ph_prev.stock_id
         WHERE p.user_id = ? AND p.quantity > 0
         ORDER BY s.symbol
-    ''', (user_id,)).fetchall()
+    """, (user_id,)).fetchall()
 
+    portfolio = []
+    for p in raw_portfolio:
+        stock_id = p["stock_id"]
+        latest = latest_map.get(stock_id, 0)
+        prev = prev_map.get(stock_id, latest)
 
-    # ----- PERFORMANCE METRICS -----
+        portfolio.append({
+            "stock_id": stock_id,
+            "symbol": p["symbol"],
+            "company_name": p["company_name"],
+            "quantity": p["quantity"],
+            "avg_cost": p["avg_cost"],
+            "total_invested": p["total_invested"],
+            "current_price": latest,
+            "value": p["quantity"] * latest,
+            "unrealized_pl": (latest - p["avg_cost"]) * p["quantity"],
+            "last_change": latest - prev
+        })
+
+    # ==========================================================================
+    # PERFORMANCE METRICS
+    # ==========================================================================
     total_deposited = user["total_deposited"] or 0
     total_withdrawn = user["total_withdrawn"] or 0
     cash_balance = user["balance"]
-    portfolio_value = sum(p["value"] for p in portfolio) if portfolio else 0
+    portfolio_value = sum(p["value"] for p in portfolio)
     overall_profit = (portfolio_value + cash_balance + total_withdrawn) - total_deposited
-    profit_pct = (overall_profit / total_deposited * 100) if total_deposited > 0 else 0
+    profit_pct = (overall_profit / total_deposited * 100) if total_deposited else 0
 
-    # ----- PRICE HISTORY CHART DATA -----
+    # ==========================================================================
+    # PRICE HISTORY FOR CHART
+    # ==========================================================================
     held_ids = [p["stock_id"] for p in portfolio]
     if held_ids:
         placeholders = ",".join("?" * len(held_ids))
-        price_rows = conn.execute(f'''
+        price_rows = conn.execute(f"""
             SELECT stock_id, price, timestamp
             FROM price_history
             WHERE stock_id IN ({placeholders})
             ORDER BY timestamp ASC
-        ''', held_ids).fetchall()
+        """, held_ids).fetchall()
     else:
         price_rows = []
 
     portfolio_history = {}
     for row in price_rows:
-        ts = row["timestamp"]
-        price = row["price"]
         sid = row["stock_id"]
         qty = next((p["quantity"] for p in portfolio if p["stock_id"] == sid), 0)
         if qty == 0:
             continue
-        portfolio_history.setdefault(ts, 0)
-        portfolio_history[ts] += qty * price
+        portfolio_history.setdefault(row["timestamp"], 0)
+        portfolio_history[row["timestamp"]] += qty * row["price"]
 
     chart_labels = sorted(portfolio_history.keys())
     chart_values = [portfolio_history[t] for t in chart_labels]
 
-    # ----- TRANSACTION HISTORY -----
+    # ==========================================================================
+    # TRANSACTION HISTORY
+    # ==========================================================================
     total_transactions = conn.execute(
-        'SELECT COUNT(*) FROM transaction_history WHERE user_id = ?', (user_id,)
-    ).fetchone()[0] or 0
+        "SELECT COUNT(*) FROM transaction_history WHERE user_id = ?", (user_id,)
+    ).fetchone()[0]
+
     total_pages = (total_transactions + per_page - 1) // per_page
 
-    transaction_history = conn.execute('''
+    transaction_history = conn.execute("""
         SELECT th.*, s.symbol
         FROM transaction_history th
         JOIN stocks s ON th.stock_id = s.stock_id
         WHERE th.user_id = ?
         ORDER BY th.timestamp DESC
         LIMIT ? OFFSET ?
-    ''', (user_id, per_page, offset)).fetchall()
+    """, (user_id, per_page, offset)).fetchall()
 
     conn.close()
 
@@ -334,8 +362,9 @@ def dashboard(user_id):
         overall_profit=overall_profit,
         profit_pct=profit_pct,
         chart_labels=chart_labels,
-        chart_values=chart_values
+        chart_values=chart_values,
     )
+
 
 
 
@@ -1654,6 +1683,12 @@ def safe_execute(query, params=()):
     print("DB write failed after retries:", query)
 
 def update_all_stock_prices():
+    # ---- CHECK MARKET STATUS FIRST ----
+    market = get_market_status()
+    if market["status"] != "open":
+        # Skip updating all prices if the market is not open
+        return
+
     settings = get_generator_settings()
 
     if not settings["enabled"]:
@@ -1683,6 +1718,7 @@ def update_all_stock_prices():
             "INSERT INTO price_history (stock_id, price) VALUES (?, ?)",
             (stock["stock_id"], new_price)
         )
+
 
 
 def price_generator_loop():
