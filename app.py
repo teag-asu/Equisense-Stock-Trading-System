@@ -1217,34 +1217,38 @@ def admin_logs():
     if check:
         return check
 
-    # Pagination parameters
     page = int(request.args.get('page', 1))
     per_page = int(request.args.get('per_page', 10))
-    selected_type = request.args.get('type', 'all')
+
+    # Multi-select types
+    selected_types = request.args.getlist("type")  # list of strings
 
     conn = get_db_connection()
 
     # Base query
-    query = "SELECT * FROM logs"
+    base_query = "FROM logs"
     params = []
 
-    # Filter by event type if selected
-    if selected_type != 'all':
-        query += " WHERE type = ?"
-        params.append(int(selected_type))
+    # Filtering
+    if selected_types:
+        placeholders = ",".join("?" for _ in selected_types)
+        base_query += f" WHERE type IN ({placeholders})"
+        params.extend(int(t) for t in selected_types)
 
-    # Count total entries for pagination
-    total_logs = conn.execute(query.replace('*', 'COUNT(*)'), params).fetchone()[0]
+    # Count logs
+    count_query = "SELECT COUNT(*) " + base_query
+    total_logs = conn.execute(count_query, params).fetchone()[0]
 
-    # Apply limit/offset for pagination
+    # Pagination
     offset = (page - 1) * per_page
-    query += " ORDER BY timestamp DESC LIMIT ? OFFSET ?"
-    params.extend([per_page, offset])
+    log_query = (
+        "SELECT * " + base_query +
+        " ORDER BY timestamp DESC LIMIT ? OFFSET ?"
+    )
 
-    logs = conn.execute(query, params).fetchall()
+    logs = conn.execute(log_query, params + [per_page, offset]).fetchall()
     conn.close()
 
-    # Event type map for filter dropdown
     event_types = {
         1: "Successful Login",
         2: "Failed Login",
@@ -1277,8 +1281,9 @@ def admin_logs():
         per_page=per_page,
         total_pages=total_pages,
         event_types=event_types,
-        selected_type=selected_type
+        selected_types=selected_types  # pass list
     )
+
 
 @app.route('/admin/market/logs/download')
 def admin_logs_download():
